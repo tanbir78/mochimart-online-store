@@ -1,0 +1,19 @@
+{
+  "name": "mochimart",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:client": "npm --workspace client run dev",
+    "dev:server": "npm --workspace server run dev",
+    "build": "npm --workspace client run build",
+    "test": "npm --workspace server test && npm --workspace client test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
