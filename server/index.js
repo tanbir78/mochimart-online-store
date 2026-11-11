@@ -10,6 +10,8 @@ import { productRouter } from './routes/products.js';
 import { healthRouter } from './routes/health.js';
 import { orderRouter } from './routes/orders.js';
 import { uploadRouter } from './routes/uploads.js';
+import { initializeFirebaseAdmin } from './config/firebase.js';
+import { adminRouter } from './routes/admin.js';
 
 const app = express();
 
@@ -47,6 +49,7 @@ app.use('/api/health', healthRouter);
 app.use('/api/products', productRouter);
 app.use('/api/orders', orderRouter);
 app.use('/api/uploads', uploadRouter);
+app.use('/api/admin', adminRouter);
 
 // Global error handler
 app.use((err, req, res, next) => {
@@ -67,12 +70,20 @@ const port = Number(process.env.PORT || 5000);
 if (process.env.NODE_ENV !== 'test') {
     connectDatabase()
         .then(() => {
+            initializeFirebaseAdmin();
+
             app.listen(port, () => {
-                console.log(`MochiMart API listening on ${port}`);
+                console.log(
+                    `MochiMart API listening on ${port}`
+                );
             });
         })
         .catch((error) => {
-            console.error('Database startup failed:', error.message);
+            console.error(
+                'Server startup failed:',
+                error.message
+            );
+
             process.exit(1);
         });
 }
