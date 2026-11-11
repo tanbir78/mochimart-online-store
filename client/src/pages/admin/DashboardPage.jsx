@@ -1,5 +1,7 @@
 
 import { useEffect, useState } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
+
 import { auth } from '../../config/firebase';
 
 export function DashboardPage() {
@@ -8,13 +10,21 @@ export function DashboardPage() {
     const [error, setError] = useState('');
 
     useEffect(() => {
-        async function fetchDashboard() {
-            try {
-                const user = auth.currentUser;
+        let isMounted = true;
 
-                if (!user) {
-                    throw new Error('Please login first.');
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                if (isMounted) {
+                    setError('Please login first.');
+                    setLoading(false);
                 }
+
+                return;
+            }
+
+            try {
+                setLoading(true);
+                setError('');
 
                 const token = await user.getIdToken();
 
@@ -36,16 +46,28 @@ export function DashboardPage() {
                     );
                 }
 
-                setStats(data);
+                if (isMounted) {
+                    setStats(data);
+                }
+
             } catch (err) {
                 console.error('Dashboard error:', err);
-                setError(err.message);
-            } finally {
-                setLoading(false);
-            }
-        }
 
-        fetchDashboard();
+                if (isMounted) {
+                    setError(err.message);
+                }
+
+            } finally {
+                if (isMounted) {
+                    setLoading(false);
+                }
+            }
+        });
+
+        return () => {
+            isMounted = false;
+            unsubscribe();
+        };
     }, []);
 
     if (loading) {
@@ -65,6 +87,8 @@ export function DashboardPage() {
             </div>
         );
     }
+
+    if (!stats) return null;
 
     const cards = [
         ['Products', stats.totalProducts],
