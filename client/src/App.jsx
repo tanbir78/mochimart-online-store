@@ -5,7 +5,7 @@ import { ShopLayout } from './layouts/ShopLayout.jsx';
 import { AdminLayout } from './layouts/AdminLayout.jsx';
 
 import { ShopPage } from './pages/public/ShopPage.jsx';
-import { ProductPage } from './pages/public/ProductPage.jsx';
+import ProductPage from './pages/public/ProductPage.jsx';
 import { CartPage } from './pages/public/CartPage.jsx';
 import { CheckoutPage } from './pages/public/CheckoutPage.jsx';
 import { NotFoundPage } from './pages/public/NotFoundPage.jsx';
@@ -14,6 +14,7 @@ import Home from './pages/public/Home.jsx';
 import { LoginPage } from './pages/auth/LoginPage.jsx';
 import { DashboardPage } from './pages/admin/DashboardPage.jsx';
 import { AdminRoute } from './components/AdminRoute.jsx';
+import SettingsPage from './pages/admin/SettingsPage.jsx';
 
 // Temporary pages for upcoming admin modules
 function AdminPlaceholder({ title }) {
@@ -71,7 +72,7 @@ export default function App() {
 
                     <Route
                         path="settings"
-                        element={<AdminPlaceholder title="Admin Settings" />}
+                        element={<SettingsPage />}
                     />
                 </Route>
             </Route>

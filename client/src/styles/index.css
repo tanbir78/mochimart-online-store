@@ -55,12 +55,6 @@ a {
   border-radius: 22px;
   box-shadow: 0 10px 35px rgba(16,70,54,.06)
 }
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 /* ================================
    MochiMart Theme Variables
 ================================ */
@@ -281,4 +275,43 @@ select:focus {
         filter: brightness(1.2);
     }
 }
+
+
+/* ================================
+   MochiMart SweetAlert2 Popup
+================================ */
+
+.mochi-swal-popup {
+    background: #FFE8CC !important;
+    border-radius: 24px !important;
+    border: 1px solid #F0E5D8 !important;
+    color: #29231F !important;
+}
+
+.mochi-swal-title {
+    color: hsl(var(--bc)) !important;
+    font-size: 25px !important;
+    font-weight: 800 !important;
+}
+
+.mochi-swal-text {
+    color: hsl(var(--bc) / 0.7) !important;
+    font-size: 14px !important;
+    line-height: 1.7 !important;
+}
+
+.mochi-swal-confirm,
+.mochi-swal-cancel {
+    border: none !important;
+    border-radius: 12px !important;
+    padding: 12px 22px !important;
+    font-weight: 700 !important;
+    transition: all 0.2s ease !important;
+}
+
+.mochi-swal-confirm:hover,
+.mochi-swal-cancel:hover {
+    transform: translateY(-2px);
+}
+
 

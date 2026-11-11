@@ -6,7 +6,7 @@ export async function requireAuth(req, res, next) {
     try {
         console.log('\n--- AUTH DEBUG START ---');
 
-        // Step 1: Check Authorization header
+        // Step 1: Check Authorization Header
         const authHeader = req.headers.authorization;
 
         console.log(
@@ -24,16 +24,14 @@ export async function requireAuth(req, res, next) {
 
         const token = authHeader.slice(7);
 
-        // Step 2: Verify Firebase token
+        // Step 2: Verify Firebase Token
         console.log('Verifying Firebase token...');
 
         const decoded = await verifyFirebaseToken(token);
 
         console.log('Firebase token verified successfully');
-        console.log('Firebase UID:', decoded.uid);
-        console.log('Firebase email:', decoded.email);
 
-        // Step 3: Find user in MongoDB
+        // Step 3: Find User in MongoDB
         console.log('Searching MongoDB user profile...');
 
         const user = await getDb()
@@ -74,7 +72,11 @@ export async function requireAuth(req, res, next) {
         next();
 
     } catch (error) {
-        console.error('AUTHENTICATION FAILED:', error.code || error.name);
+        console.error(
+            'AUTHENTICATION FAILED:',
+            error.code || error.name
+        );
+
         console.error('Error message:', error.message);
 
         return res.status(401).json({
@@ -83,6 +85,7 @@ export async function requireAuth(req, res, next) {
     }
 }
 
+// Admin Authorization Middleware
 export function requireAdmin(req, res, next) {
     if (req.user?.role !== 'admin') {
         console.log('Admin permission denied');

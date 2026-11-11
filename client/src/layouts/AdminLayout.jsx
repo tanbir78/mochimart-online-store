@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
-
 import {
     LayoutDashboard,
     Package,
@@ -15,9 +14,9 @@ import {
     Moon,
     Sun
 } from 'lucide-react';
-
 import { auth } from '../config/firebase';
 import MochiMartIcon from '../components/common/MochiMartIcon';
+
 
 const menuItems = [
     {
@@ -85,7 +84,7 @@ export function AdminLayout() {
 
 
                 {/* Logo */}
-                <div className="h-20 px-6 flex items-center border-b border-base-300">
+                <div className="h-20 px-6 flex items-center">
                     <NavLink
                         to="/"
                         className="flex items-center gap-1 text-2xl font-extrabold tracking-tight"
@@ -96,28 +95,10 @@ export function AdminLayout() {
                     </NavLink>
                 </div>
 
-
-                {/* Admin Info */}
-                <div className="p-5">
-                    <div className="bg-base-200 rounded-xl p-4">
-                        <p className="text-xs text-base-content/60">
-                            Welcome back,
-                        </p>
-
-                        <p className="font-bold text-base-content mt-1">
-                            Administrator
-                        </p>
-
-                        <span className="text-xs font-semibold text-primary">
-                            Store Manager
-                        </span>
-                    </div>
-                </div>
-
                 {/* Navigation */}
                 <nav className="flex-1 px-4 space-y-2">
 
-                    <p className="text-xs font-bold text-base-content/50 px-3 mb-3">
+                    <p className="text-xs font-bold text-base-content/50 px-3 mb-3 mt-4">
                         MAIN MENU
                     </p>
 
@@ -145,7 +126,7 @@ export function AdminLayout() {
                 </nav>
 
                 {/* Bottom Actions */}
-                <div className="p-4 border-t border-base-300">
+                <div className="p-4">
 
                     <button
                         onClick={handleLogout}
@@ -154,15 +135,6 @@ export function AdminLayout() {
                         <LogOut size={19} />
                         Logout
                     </button>
-
-                    <NavLink
-                        to="/"
-                        className="flex items-center gap-3 px-4 py-3 mt-2 text-sm text-base-content/60 hover:text-primary transition"
-                    >
-                        <Store size={19} />
-                        Visit Store
-                    </NavLink>
-
                 </div>
             </aside>
 
@@ -200,8 +172,18 @@ export function AdminLayout() {
                         </button>
 
                         {/* Admin Avatar */}
-                        <div className="w-10 h-10 rounded-full bg-primary text-primary-content flex items-center justify-center font-bold">
-                            A
+                        <div className="h-10 w-10 overflow-hidden rounded-full border-2 border-primary bg-secondary">
+                            {auth.currentUser?.photoURL ? (
+                                <img
+                                    src={auth.currentUser.photoURL}
+                                    alt="Admin Profile"
+                                    className="h-full w-full object-cover"
+                                />
+                            ) : (
+                                <div className="flex h-full w-full items-center justify-center font-bold text-primary">
+                                    {auth.currentUser?.displayName?.charAt(0)?.toUpperCase() || 'A'}
+                                </div>
+                            )}
                         </div>
 
                     </div>

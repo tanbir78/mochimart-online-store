@@ -3,9 +3,17 @@ import { Router } from 'express';
 import multer from 'multer';
 import cloudinary from '../config/cloudinary.js';
 
+import {
+    requireAuth,
+    requireAdmin
+} from '../middleware/auth.js';
+
 export const uploadRouter = Router();
 
-// Store uploaded file temporarily in memory
+// ========================================
+// Multer Configuration
+// ========================================
+
 const storage = multer.memoryStorage();
 
 const upload = multer({
@@ -14,49 +22,123 @@ const upload = multer({
         fileSize: 5 * 1024 * 1024
     },
     fileFilter: (req, file, callback) => {
-        if (!file.mimetype.startsWith('image/')) {
-            return callback(new Error('Only image files are allowed.'));
+        const allowedTypes = [
+            'image/jpeg',
+            'image/png',
+            'image/webp'
+        ];
+
+        if (!allowedTypes.includes(file.mimetype)) {
+            return callback(
+                new Error('Only JPG, PNG and WEBP images are allowed.')
+            );
         }
 
         callback(null, true);
     }
 });
 
-// Upload image to Cloudinary
-uploadRouter.post('/image', upload.single('image'), async (req, res, next) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({
-                error: 'Please select an image.'
-            });
-        }
+// ========================================
+// Reusable Cloudinary Upload Function
+// ========================================
 
-        const uploadResult = await new Promise((resolve, reject) => {
-            const stream = cloudinary.uploader.upload_stream(
+function uploadToCloudinary(buffer, options) {
+    return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+            {
+                ...options,
+                resource_type: 'image'
+            },
+            (error, result) => {
+                if (error) {
+                    reject(error);
+                } else {
+                    resolve(result);
+                }
+            }
+        );
+
+        stream.end(buffer);
+    });
+}
+
+// ========================================
+// Upload Product Image
+// POST /api/uploads/image
+// ========================================
+
+uploadRouter.post(
+    '/image',
+    requireAuth,
+    requireAdmin,
+    upload.single('image'),
+    async (req, res, next) => {
+        try {
+            if (!req.file) {
+                return res.status(400).json({
+                    error: 'Please select an image.'
+                });
+            }
+
+            const result = await uploadToCloudinary(
+                req.file.buffer,
                 {
-                    folder: 'mochimart/products',
-                    resource_type: 'image'
-                },
-                (error, result) => {
-                    if (error) {
-                        reject(error);
-                    } else {
-                        resolve(result);
-                    }
+                    folder: 'mochimart/products'
                 }
             );
 
-            stream.end(req.file.buffer);
-        });
+            res.status(201).json({
+                message: 'Product image uploaded successfully.',
+                image: {
+                    url: result.secure_url,
+                    publicId: result.public_id
+                }
+            });
 
-        res.status(201).json({
-            message: 'Image uploaded successfully.',
-            image: {
-                url: uploadResult.secure_url,
-                publicId: uploadResult.public_id
-            }
-        });
-    } catch (error) {
-        next(error);
+        } catch (error) {
+            next(error);
+        }
     }
-});
+);
+
+// ========================================
+// Upload Admin Profile Image
+// POST /api/uploads/profile
+// ========================================
+
+uploadRouter.post(
+    '/profile',
+    requireAuth,
+    requireAdmin,
+    upload.single('image'),
+    async (req, res, next) => {
+        try {
+            if (!req.file) {
+                return res.status(400).json({
+                    error: 'Please select a profile image.'
+                });
+            }
+
+            const result = await uploadToCloudinary(
+                req.file.buffer,
+                {
+                    folder: 'mochimart/profiles',
+                    public_id: req.user.uid,
+                    overwrite: true,
+                    invalidate: true
+                }
+            );
+
+            res.status(201).json({
+                message: 'Profile image uploaded successfully.',
+                image: {
+                    url: result.secure_url,
+                    publicId: result.public_id
+                }
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+);

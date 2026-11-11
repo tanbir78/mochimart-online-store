@@ -13,15 +13,18 @@ function ProductCard({ product }) {
       : '');
 
   return (
-    <div className="overflow-hidden rounded-xl bg-white shadow-md transition hover:-translate-y-1 hover:shadow-lg">
+    <div className="overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-md transition duration-300 hover:-translate-y-1 hover:shadow-xl">
 
       {/* Product Image */}
-      <div className="flex h-52 items-center justify-center overflow-hidden bg-emerald-50">
+      <div className="flex h-52 items-center justify-center overflow-hidden bg-secondary">
 
         {image && !imageError ? (
           <img
             src={image}
-            alt={product.images?.find((img) => img.isPrimary)?.alt || product.name}
+            alt={
+              product.images?.find((img) => img.isPrimary)?.alt ||
+              product.name
+            }
             className="h-full w-full object-cover transition duration-300 hover:scale-105"
             loading="lazy"
             onError={() => setImageError(true)}
@@ -35,27 +38,31 @@ function ProductCard({ product }) {
       {/* Product Information */}
       <div className="p-4">
 
-        <p className="text-sm text-emerald-600">
+        <p className="text-sm font-medium text-primary">
           {product.category}
         </p>
 
-        <h3 className="mt-2 text-lg font-semibold">
+        <h3 className="mt-2 text-lg font-semibold text-base-content">
           {product.name}
         </h3>
 
-        <p className="mt-3 text-xl font-bold text-emerald-600">
+        <p className="mt-3 text-xl font-bold text-primary">
           ৳{Number(product.price).toLocaleString('en-BD')}
         </p>
 
-        <p className="mt-2 text-sm text-gray-500">
+        <p className={`mt-2 text-sm font-medium ${
+          product.stock > 0
+            ? 'text-success'
+            : 'text-error'
+        }`}>
           {product.stock > 0 ? 'In Stock' : 'Out of Stock'}
         </p>
 
         <Link
           to={`/products/${product._id}`}
-          className="mt-4 block rounded-lg bg-emerald-500 px-4 py-2.5 text-center font-semibold text-white hover:bg-emerald-600"
+          className="mt-4 block rounded-xl bg-primary px-4 py-2.5 text-center font-semibold text-primary-content transition duration-200 hover:brightness-95 hover:-translate-y-0.5"
         >
-          View Product
+          View Product →
         </Link>
 
       </div>
