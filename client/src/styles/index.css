@@ -55,3 +55,230 @@ a {
   border-radius: 22px;
   box-shadow: 0 10px 35px rgba(16,70,54,.06)
 }
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ================================
+   MochiMart Theme Variables
+================================ */
+
+:root {
+    font-family: 'DM Sans', sans-serif;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+
+    color-scheme: light;
+
+    --mm-bg: #FFF9F2;
+    --mm-card: #FFFFFF;
+    --mm-primary: #F28C28;
+    --mm-primary-hover: #D97706;
+    --mm-secondary: #FFE8CC;
+    --mm-text: #29231F;
+    --mm-muted: #81766D;
+    --mm-border: #F0E5D8;
+    --mm-shadow: rgba(70, 45, 20, 0.07);
+}
+
+/* Night Mode */
+
+[data-theme="dark"] {
+    color-scheme: dark;
+
+    --mm-bg: #171512;
+    --mm-card: #26211B;
+    --mm-primary: #FFA640;
+    --mm-primary-hover: #FFB75C;
+    --mm-secondary: #3B2C1E;
+    --mm-text: #FFF7ED;
+    --mm-muted: #B9ADA0;
+    --mm-border: #40352A;
+    --mm-shadow: rgba(0, 0, 0, 0.25);
+}
+
+/* ================================
+   Global Styles
+================================ */
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    margin: 0;
+    min-width: 320px;
+    font-family: 'DM Sans', sans-serif;
+    color: var(--mm-text);
+    background: var(--mm-bg);
+    transition:
+        background-color 0.25s ease,
+        color 0.25s ease;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+    transition: all 0.2s ease;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+button {
+    cursor: pointer;
+}
+
+.container {
+    width: min(1160px, calc(100% - 40px));
+    margin-inline: auto;
+}
+
+/* ================================
+   MochiMart Buttons
+================================ */
+
+.btn-mochi {
+    background: var(--mm-primary);
+    color: #FFFFFF;
+    border: 0;
+    border-radius: 999px;
+    padding: 12px 22px;
+    font-weight: 700;
+    transition: all 0.2s ease;
+}
+
+[data-theme="dark"] .btn-mochi {
+    color: #292016;
+}
+
+.btn-mochi:hover {
+    background: var(--mm-primary-hover);
+    transform: translateY(-1px);
+}
+
+.btn-mochi:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* ================================
+   Soft Cards
+================================ */
+
+.card-soft {
+    background: var(--mm-card);
+    color: var(--mm-text);
+    border: 1px solid var(--mm-border);
+    border-radius: 22px;
+    box-shadow: 0 10px 35px var(--mm-shadow);
+    transition:
+        background-color 0.25s ease,
+        border-color 0.25s ease,
+        color 0.25s ease,
+        box-shadow 0.25s ease;
+}
+
+/* ================================
+   Form Elements
+================================ */
+
+input,
+textarea,
+select {
+    color: var(--mm-text);
+    background: var(--mm-card);
+    border-color: var(--mm-border);
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--mm-muted);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    outline: 2px solid var(--mm-primary);
+    outline-offset: 1px;
+}
+
+/* ================================
+   Theme Utility Classes
+================================ */
+
+.text-mochi {
+    color: var(--mm-primary);
+}
+
+.bg-mochi {
+    background-color: var(--mm-primary);
+}
+
+.bg-mochi-secondary {
+    background-color: var(--mm-secondary);
+}
+
+.border-mochi {
+    border-color: var(--mm-border);
+}
+
+.text-muted-mochi {
+    color: var(--mm-muted);
+}
+
+/* Hero Heading Animation */
+.hero-title-glow {
+    animation: titleOrangePulse 1.4s ease-in-out infinite;
+}
+
+@keyframes titleOrangePulse {
+    0%, 100% {
+        text-shadow: 0 0 3px rgba(242, 140, 40, 0.2);
+    }
+
+    50% {
+        text-shadow:
+            0 0 7px rgba(242, 140, 40, 0.4),
+            0 0 14px rgba(242, 140, 40, 0.25);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hero-title-glow {
+        animation: none;
+    }
+}
+
+
+/* Hero Button Pulse Glow Animation */
+/* Orange Blinking Glow */
+.hero-button-glow {
+    animation: softOrangePulse 1.2s ease-in-out infinite;
+}
+
+@keyframes softOrangePulse {
+    0%, 100% {
+        box-shadow: 0 0 5px rgba(242, 140, 40, 0.3);
+        filter: brightness(1);
+    }
+
+    50% {
+        box-shadow:
+            0 0 10px rgba(242, 140, 40, 0.55),
+            0 0 20px rgba(242, 140, 40, 0.3);
+        filter: brightness(1.2);
+    }
+}
+

@@ -72,7 +72,7 @@ export function DashboardPage() {
 
     if (loading) {
         return (
-            <div className="container py-12">
+            <div className="py-12 text-base-content">
                 Loading dashboard...
             </div>
         );
@@ -80,10 +80,8 @@ export function DashboardPage() {
 
     if (error) {
         return (
-            <div className="container py-12">
-                <p className="text-red-500">
-                    {error}
-                </p>
+            <div className="py-12">
+                <p className="text-error">{error}</p>
             </div>
         );
     }
@@ -98,8 +96,9 @@ export function DashboardPage() {
     ];
 
     return (
-        <div className="container py-12">
-            <p className="text-xs tracking-widest font-bold text-[#00a982]">
+        <div className="py-8 text-base-content">
+
+            <p className="text-xs tracking-widest font-bold text-primary">
                 STORE CONTROL
             </p>
 
@@ -107,22 +106,27 @@ export function DashboardPage() {
                 Dashboard overview
             </h1>
 
-            <p className="text-slate-500 mt-2">
+            <p className="text-base-content/60 mt-2">
                 Live statistics from your MochiMart database.
             </p>
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
+
                 {cards.map(([label, value]) => (
-                    <div className="card-soft p-6" key={label}>
-                        <p className="text-sm text-slate-400">
+                    <div
+                        className="card-soft p-6"
+                        key={label}
+                    >
+                        <p className="text-sm text-base-content/60">
                             {label}
                         </p>
 
-                        <p className="text-3xl font-extrabold mt-2">
+                        <p className="text-3xl font-extrabold mt-2 text-primary">
                             {value}
                         </p>
                     </div>
                 ))}
+
             </div>
         </div>
     );

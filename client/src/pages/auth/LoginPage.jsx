@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 
 import { auth } from '../../config/firebase';
+import MochiMartIcon from '../../components/common/MochiMartIcon';
 
 export function LoginPage() {
     const navigate = useNavigate();
@@ -48,7 +49,10 @@ export function LoginPage() {
     return (
         <div className="container py-16 max-w-md">
             <div className="card-soft p-8">
-                <div className="text-center text-4xl">🍡</div>
+
+                <div className="flex justify-center">
+                    <MochiMartIcon size={100} />
+                </div>
 
                 <h1 className="text-3xl font-extrabold text-center mt-3">
                     Welcome back!
