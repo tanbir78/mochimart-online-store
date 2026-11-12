@@ -11,6 +11,9 @@ import {
 } from 'lucide-react';
 
 import { useEffect, useState } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
+
+import { auth } from '../config/firebase';
 import { getCart } from '../utilities/cart.js';
 import MochiMartIcon from '../components/common/MochiMartIcon.jsx';
 
@@ -20,6 +23,8 @@ export function ShopLayout() {
     );
 
     const [cartCount, setCartCount] = useState(0);
+    const [currentUser, setCurrentUser] = useState(null);
+    const [authLoading, setAuthLoading] = useState(true);
 
     // Apply theme globally and save preference
     useEffect(() => {
@@ -30,7 +35,17 @@ export function ShopLayout() {
         localStorage.setItem('mochimart_theme', theme);
     }, [dark]);
 
-    // Cart count
+    // Firebase Authentication State
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            setCurrentUser(user);
+            setAuthLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    // Cart Count
     useEffect(() => {
         const updateCartCount = () => {
             const cart = getCart();
@@ -62,7 +77,6 @@ export function ShopLayout() {
                 <span>Welcome to MochiMart</span>
             </div>
 
-
             {/* Navbar */}
             <header className="sticky top-0 z-30 border-b border-base-300 bg-base-100/95 backdrop-blur">
 
@@ -78,15 +92,12 @@ export function ShopLayout() {
                         <MochiMartIcon size={55} className="ml-0" />
                     </Link>
 
-
                     {/* Navigation */}
                     <nav className="hidden gap-7 text-sm font-semibold text-base-content/70 md:flex">
-
                         <NavLink to="/">Home</NavLink>
                         <NavLink to="/shop">Shop</NavLink>
                         <a href="/#categories">Categories</a>
                         <a href="/#deals">Deals</a>
-
                     </nav>
 
                     {/* Navbar Actions */}
@@ -94,14 +105,12 @@ export function ShopLayout() {
 
                         {/* Search */}
                         <label className="hidden items-center gap-2 rounded-full bg-base-200 px-4 py-2 text-base-content/50 lg:flex">
-
                             <Search size={16} />
 
                             <input
                                 className="w-40 bg-transparent text-sm outline-none"
                                 placeholder="Search products"
                             />
-
                         </label>
 
                         {/* Theme Toggle */}
@@ -110,9 +119,7 @@ export function ShopLayout() {
                             aria-label={
                                 dark ? 'Switch to light mode' : 'Switch to dark mode'
                             }
-                            title={
-                                dark ? 'Light Mode' : 'Dark Mode'
-                            }
+                            title={dark ? 'Light Mode' : 'Dark Mode'}
                             onClick={() => setDark(previous => !previous)}
                             className="rounded-full p-2 text-base-content hover:bg-base-200"
                         >
@@ -125,9 +132,10 @@ export function ShopLayout() {
 
                         {/* Account */}
                         <Link
-                            to="/login"
+                            to={authLoading ? '/login' : currentUser ? '/account' : '/login'}
                             aria-label="Account"
-                            className="text-base-content"
+                            title={currentUser ? 'My Account' : 'Sign In'}
+                            className="text-base-content transition-colors hover:text-primary"
                         >
                             <UserRound size={20} />
                         </Link>
@@ -157,9 +165,7 @@ export function ShopLayout() {
                         </button>
 
                     </div>
-
                 </div>
-
             </header>
 
             {/* Page Content */}
@@ -173,12 +179,10 @@ export function ShopLayout() {
                 <div className="container grid gap-8 py-12 md:grid-cols-3">
 
                     <div>
-
                         <div className="flex items-center gap-1 text-2xl font-extrabold">
                             <span>mochimart</span>
                             <MochiMartIcon size={50} className="ml-0" />
                         </div>
-
 
                         <p className="mt-3 max-w-xs text-sm opacity-70">
                             Your happy little shopping place. Discover small joys, every day.
@@ -191,7 +195,9 @@ export function ShopLayout() {
                         <div className="mt-3 grid gap-2 text-sm opacity-70">
                             <Link to="/shop">Shop all</Link>
                             <Link to="/cart">Your cart</Link>
-                            <Link to="/login">My account</Link>
+                            <Link to={currentUser ? '/account' : '/login'}>
+                                My account
+                            </Link>
                         </div>
                     </div>
 
@@ -203,7 +209,6 @@ export function ShopLayout() {
                         </p>
 
                         <div className="mt-3 flex">
-
                             <input
                                 placeholder="Email address"
                                 className="min-w-0 rounded-l-full bg-base-100 px-4 py-2 text-base-content"
@@ -212,7 +217,6 @@ export function ShopLayout() {
                             <button className="rounded-r-full bg-mochi px-4 font-bold text-white">
                                 Join
                             </button>
-
                         </div>
                     </div>
 

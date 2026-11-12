@@ -142,3 +142,45 @@ uploadRouter.post(
         }
     }
 );
+
+
+
+// ========================================
+// Upload Customer Profile Image
+// POST /api/uploads/customer-profile
+// ========================================
+
+uploadRouter.post(
+    '/customer-profile',
+    requireAuth,
+    upload.single('image'),
+    async (req, res, next) => {
+        try {
+            if (!req.file) {
+                return res.status(400).json({
+                    error: 'Please select a profile image.'
+                });
+            }
+
+            const result = await uploadToCloudinary(
+                req.file.buffer,
+                {
+                    folder: 'mochimart/customer-profiles',
+                    public_id: req.user.uid,
+                    overwrite: true,
+                    invalidate: true
+                }
+            );
+
+            res.status(201).json({
+                message: 'Customer profile image uploaded successfully.',
+                image: {
+                    url: result.secure_url,
+                    publicId: result.public_id
+                }
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+);

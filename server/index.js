@@ -7,12 +7,14 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
 import { connectDatabase } from './config/database.js';
+import { initializeFirebaseAdmin } from './config/firebase.js';
+
 import { productRouter } from './routes/products.js';
 import { healthRouter } from './routes/health.js';
 import { orderRouter } from './routes/orders.js';
 import { uploadRouter } from './routes/uploads.js';
-import { initializeFirebaseAdmin } from './config/firebase.js';
 import { adminRouter } from './routes/admin.js';
+import { authRouter } from './routes/auth.js';
 
 const app = express();
 
@@ -108,6 +110,8 @@ app.use(
 // ========================================
 
 app.use('/api/health', healthRouter);
+
+app.use('/api/auth', authRouter);
 
 app.use('/api/products', productRouter);
 

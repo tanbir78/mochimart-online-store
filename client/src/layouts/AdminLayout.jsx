@@ -10,13 +10,12 @@ import {
     ChartColumn,
     Settings,
     LogOut,
-    Store,
     Moon,
     Sun
 } from 'lucide-react';
+
 import { auth } from '../config/firebase';
 import MochiMartIcon from '../components/common/MochiMartIcon';
-
 
 const menuItems = [
     {
@@ -59,7 +58,9 @@ export function AdminLayout() {
         () => localStorage.getItem('mochimart_theme') === 'dark'
     );
 
-    // Apply and save the selected theme
+    const [loggingOut, setLoggingOut] = useState(false);
+
+    // Apply and save selected theme
     useEffect(() => {
         const theme = dark ? 'dark' : 'light';
 
@@ -67,12 +68,15 @@ export function AdminLayout() {
         localStorage.setItem('mochimart_theme', theme);
     }, [dark]);
 
+    // Logout
     async function handleLogout() {
         try {
+            setLoggingOut(true);
             await signOut(auth);
-            navigate('/login');
+            navigate('/login', { replace: true });
         } catch (error) {
             console.error('Logout failed:', error);
+            setLoggingOut(false);
         }
     }
 
@@ -81,7 +85,6 @@ export function AdminLayout() {
 
             {/* Sidebar */}
             <aside className="w-64 shrink-0 bg-base-100 border-r border-base-300 flex flex-col">
-
 
                 {/* Logo */}
                 <div className="h-20 px-6 flex items-center">
@@ -96,7 +99,7 @@ export function AdminLayout() {
                 </div>
 
                 {/* Navigation */}
-                <nav className="flex-1 px-4 space-y-2">
+                <nav className="px-4">
 
                     <p className="text-xs font-bold text-base-content/50 px-3 mb-3 mt-4">
                         MAIN MENU
@@ -111,7 +114,7 @@ export function AdminLayout() {
                                 to={item.path}
                                 end={item.end}
                                 className={({ isActive }) =>
-                                    `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${isActive
+                                    `flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-sm font-semibold transition-all duration-200 ${isActive
                                         ? 'bg-primary text-primary-content shadow-md'
                                         : 'text-base-content/75 hover:bg-secondary hover:text-secondary-content'
                                     }`
@@ -123,19 +126,24 @@ export function AdminLayout() {
                         );
                     })}
 
+                    {/* Logout - Below Settings */}
+                    <div className="mt-4 border-t border-base-300 pt-4">
+                        <button
+                            onClick={handleLogout}
+                            disabled={loggingOut}
+                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-error hover:bg-error/10 transition disabled:opacity-50"
+                        >
+                            {loggingOut ? (
+                                <span className="loading loading-spinner loading-sm" />
+                            ) : (
+                                <LogOut size={19} />
+                            )}
+
+                            {loggingOut ? 'Logging out...' : 'Logout'}
+                        </button>
+                    </div>
+
                 </nav>
-
-                {/* Bottom Actions */}
-                <div className="p-4">
-
-                    <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-error hover:bg-error/10 transition"
-                    >
-                        <LogOut size={19} />
-                        Logout
-                    </button>
-                </div>
             </aside>
 
             {/* Main Content */}
@@ -160,7 +168,11 @@ export function AdminLayout() {
                         <button
                             type="button"
                             onClick={() => setDark(previous => !previous)}
-                            aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+                            aria-label={
+                                dark
+                                    ? 'Switch to light mode'
+                                    : 'Switch to dark mode'
+                            }
                             title={dark ? 'Light Mode' : 'Dark Mode'}
                             className="p-2 rounded-full text-base-content hover:bg-base-200 transition"
                         >

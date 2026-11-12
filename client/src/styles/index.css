@@ -233,7 +233,7 @@ select:focus {
 }
 
 /* Hero Heading Animation */
-.hero-title-glow {
+/* .hero-title-glow {
     animation: titleOrangePulse 1.4s ease-in-out infinite;
 }
 
@@ -253,7 +253,7 @@ select:focus {
     .hero-title-glow {
         animation: none;
     }
-}
+} */
 
 
 /* Hero Button Pulse Glow Animation */
