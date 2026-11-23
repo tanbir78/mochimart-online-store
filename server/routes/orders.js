@@ -384,3 +384,141 @@ orderRouter.get(
         }
     }
 );
+
+
+// ========================================
+// Customer Notifications
+// ========================================
+
+// GET /api/orders/notifications
+// Get logged-in customer's notifications
+orderRouter.get('/notifications', requireAuth, async (req, res, next) => {
+    try {
+        if (req.user.role !== 'customer') {
+            return res.status(403).json({
+                error: 'Customer access required.'
+            });
+        }
+
+        const db = getDb();
+        const notificationsCollection = db.collection('notifications');
+
+        const filter = {
+            userId: req.user.uid
+        };
+
+        const [notifications, unreadCount] = await Promise.all([
+            notificationsCollection
+                .find(filter)
+                .sort({ createdAt: -1 })
+                .limit(15)
+                .toArray(),
+
+            notificationsCollection.countDocuments({
+                ...filter,
+                isRead: false
+            })
+        ]);
+
+        return res.json({
+            notifications,
+            unreadCount
+        });
+
+    } catch (error) {
+        next(error);
+    }
+});
+
+
+// PATCH /api/orders/notifications/:id/read
+// Mark one notification as read
+orderRouter.patch(
+    '/notifications/:id/read',
+    requireAuth,
+    async (req, res, next) => {
+        try {
+            if (req.user.role !== 'customer') {
+                return res.status(403).json({
+                    error: 'Customer access required.'
+                });
+            }
+
+            const { id } = req.params;
+
+            if (!ObjectId.isValid(id)) {
+                return res.status(400).json({
+                    error: 'Invalid notification ID.'
+                });
+            }
+
+            const result = await getDb()
+                .collection('notifications')
+                .updateOne(
+                    {
+                        _id: new ObjectId(id),
+                        userId: req.user.uid
+                    },
+                    {
+                        $set: {
+                            isRead: true,
+                            readAt: new Date()
+                        }
+                    }
+                );
+
+            if (result.matchedCount === 0) {
+                return res.status(404).json({
+                    error: 'Notification not found.'
+                });
+            }
+
+            return res.json({
+                message: 'Notification marked as read.'
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+
+// PATCH /api/orders/notifications/read-all
+// Mark all customer notifications as read
+orderRouter.patch(
+    '/notifications/read-all',
+    requireAuth,
+    async (req, res, next) => {
+        try {
+            if (req.user.role !== 'customer') {
+                return res.status(403).json({
+                    error: 'Customer access required.'
+                });
+            }
+
+            await getDb()
+                .collection('notifications')
+                .updateMany(
+                    {
+                        userId: req.user.uid,
+                        isRead: false
+                    },
+                    {
+                        $set: {
+                            isRead: true,
+                            readAt: new Date()
+                        }
+                    }
+                );
+
+            return res.json({
+                message: 'All notifications marked as read.'
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+

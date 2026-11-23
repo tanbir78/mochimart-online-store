@@ -1,6 +1,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
     Package,
     ShoppingBag,
@@ -8,7 +8,15 @@ import {
     ChevronLeft,
     ChevronRight,
     RefreshCw,
-    Eye
+    Eye,
+    X,
+    MapPin,
+    Phone,
+    Mail,
+    Clock,
+    CreditCard,
+    User,
+    Truck
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -34,10 +42,12 @@ const paymentStyles = {
 function formatDate(date) {
     if (!date) return 'Date unavailable';
 
-    return new Date(date).toLocaleDateString('en-BD', {
+    return new Date(date).toLocaleString('en-BD', {
         day: 'numeric',
         month: 'short',
-        year: 'numeric'
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
     });
 }
 
@@ -46,6 +56,8 @@ function formatCurrency(amount) {
 }
 
 export function MyOrdersPage() {
+    const [searchParams, setSearchParams] = useSearchParams();
+
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -59,6 +71,10 @@ export function MyOrdersPage() {
         totalOrders: 0,
         limit: 10
     });
+
+    const [selectedOrder, setSelectedOrder] = useState(null);
+    const [detailsLoading, setDetailsLoading] = useState(false);
+    const [detailsError, setDetailsError] = useState('');
 
     const fetchOrders = useCallback(async () => {
         try {
@@ -94,9 +110,7 @@ export function MyOrdersPage() {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(
-                    data.error || 'Unable to load your orders.'
-                );
+                throw new Error(data.error || 'Unable to load your orders.');
             }
 
             setOrders(data.orders || []);
@@ -109,7 +123,6 @@ export function MyOrdersPage() {
                     limit: 10
                 }
             );
-
         } catch (err) {
             console.error('My Orders Error:', err);
             setError(err.message || 'Something went wrong.');
@@ -140,10 +153,76 @@ export function MyOrdersPage() {
         };
     }, [fetchOrders]);
 
+    // Fetch individual order details
+    const fetchOrderDetails = useCallback(async (orderId) => {
+        if (!orderId) return;
+
+        try {
+            setDetailsLoading(true);
+            setDetailsError('');
+            setSelectedOrder(null);
+
+            const user = auth.currentUser;
+
+            if (!user) {
+                throw new Error('Please login to view order details.');
+            }
+
+            const token = await user.getIdToken();
+
+            const response = await fetch(
+                `${API_URL}/api/orders/my-orders/${encodeURIComponent(orderId)}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.error || 'Unable to load order details.'
+                );
+            }
+
+            setSelectedOrder(data.order || data);
+        } catch (err) {
+            console.error('Order Details Error:', err);
+            setDetailsError(err.message || 'Unable to load order details.');
+        } finally {
+            setDetailsLoading(false);
+        }
+    }, []);
+
+    // Open details from URL or notification
+    useEffect(() => {
+        const orderId = searchParams.get('orderId');
+
+        if (orderId) {
+            fetchOrderDetails(orderId);
+        }
+    }, [searchParams, fetchOrderDetails]);
+
+    // Open order details from Order Summary button
+    const handleViewDetails = (orderId) => {
+        setSearchParams({ orderId });
+    };
+
+    // Close details modal
+    const handleCloseDetails = () => {
+        setSelectedOrder(null);
+        setDetailsError('');
+        setSearchParams({});
+    };
+
     const handleStatusChange = (value) => {
         setStatus(value);
         setPage(1);
     };
+
+    const orderAddress = selectedOrder?.customer?.address;
 
     return (
         <div className="space-y-7">
@@ -258,9 +337,7 @@ export function MyOrdersPage() {
             {/* Error */}
             {!loading && error && (
                 <div className="rounded-2xl border border-error/30 bg-error/5 p-6 text-center">
-                    <p className="font-semibold text-error">
-                        {error}
-                    </p>
+                    <p className="font-semibold text-error">{error}</p>
 
                     <button
                         type="button"
@@ -301,7 +378,6 @@ export function MyOrdersPage() {
             {/* Orders List */}
             {!loading && !error && orders.length > 0 && (
                 <div className="space-y-5">
-
                     {orders.map((order) => {
                         const orderId = order._id?.toString();
 
@@ -310,10 +386,7 @@ export function MyOrdersPage() {
                                 key={orderId}
                                 className="overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-sm transition hover:shadow-md"
                             >
-
-                                {/* Order Header */}
                                 <div className="flex flex-col gap-4 border-b border-base-300 p-5 sm:flex-row sm:items-center sm:justify-between">
-
                                     <div>
                                         <p className="text-xs text-base-content/50">
                                             ORDER ID
@@ -325,7 +398,6 @@ export function MyOrdersPage() {
                                     </div>
 
                                     <div className="flex flex-wrap gap-2">
-
                                         <span className={`rounded-full px-3 py-1.5 text-xs font-bold capitalize ${statusStyles[order.orderStatus] || 'bg-base-200 text-base-content'}`}>
                                             {order.orderStatus || 'Unknown'}
                                         </span>
@@ -333,14 +405,10 @@ export function MyOrdersPage() {
                                         <span className={`rounded-full px-3 py-1.5 text-xs font-bold capitalize ${paymentStyles[order.paymentStatus] || 'bg-base-200 text-base-content'}`}>
                                             Payment: {order.paymentStatus || 'Unknown'}
                                         </span>
-
                                     </div>
-
                                 </div>
 
-                                {/* Order Information */}
                                 <div className="grid gap-5 p-5 sm:grid-cols-2">
-
                                     <div>
                                         <div className="flex items-center gap-2 text-sm text-base-content/50">
                                             <CalendarDays size={16} />
@@ -400,96 +468,23 @@ export function MyOrdersPage() {
 
                                         <button
                                             type="button"
-                                            onClick={() => {
-                                                // Detailed order page can be added next.
-                                                window.dispatchEvent(
-                                                    new CustomEvent('showOrderDetails', {
-                                                        detail: { orderId }
-                                                    })
-                                                );
-                                            }}
+                                            onClick={() => handleViewDetails(orderId)}
                                             className="inline-flex items-center gap-2 rounded-xl border border-base-300 px-4 py-2 text-sm font-semibold text-base-content transition hover:bg-base-200"
                                         >
                                             <Eye size={16} />
                                             Order Summary
                                         </button>
                                     </div>
-
                                 </div>
-
-                                {/* Order Status Timeline */}
-                                <div className="border-t border-base-300 bg-base-200/40 p-5">
-                                    <div className="mb-4 flex items-center justify-between gap-3">
-                                        <div>
-                                            <h3 className="font-bold text-base-content">
-                                                Order Status History
-                                            </h3>
-                                            <p className="mt-1 text-xs text-base-content/50">
-                                                Updates made to this order
-                                            </p>
-                                        </div>
-                                        <span className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${statusStyles[order.orderStatus] || 'bg-base-200 text-base-content'}`}>
-                                            {order.orderStatus || 'Unknown'}
-                                        </span>
-                                    </div>
-
-                                    {Array.isArray(order.statusHistory) && order.statusHistory.length > 0 ? (
-                                        <ol className="space-y-0">
-                                            {order.statusHistory.map((event, index) => {
-                                                const isLast = index === order.statusHistory.length - 1;
-                                                const eventStatus = event.toStatus || 'updated';
-
-                                                return (
-                                                    <li
-                                                        key={`${event.changedAt || index}-${index}`}
-                                                        className="relative flex gap-3 pb-5 last:pb-0"
-                                                    >
-                                                        {!isLast && (
-                                                            <span className="absolute left-[9px] top-5 h-full w-px bg-base-300" />
-                                                        )}
-                                                        <span className={`relative z-10 mt-1 h-5 w-5 shrink-0 rounded-full border-2 border-base-100 ${isLast ? 'bg-primary' : 'bg-base-300'}`} />
-                                                        <div className="min-w-0 flex-1">
-                                                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                <p className="text-sm font-bold capitalize text-base-content">
-                                                                    {eventStatus === 'pending' ? 'Order Placed' : eventStatus}
-                                                                </p>
-                                                                <span className="text-xs text-base-content/50">
-                                                                    {formatDate(event.changedAt)}
-                                                                </span>
-                                                            </div>
-                                                            {event.note && (
-                                                                <p className="mt-1 text-xs text-base-content/60">
-                                                                    {event.note}
-                                                                </p>
-                                                            )}
-                                                            <p className="mt-1 text-xs text-base-content/50">
-                                                                Updated by {event.changedBy?.type === 'system'
-                                                                    ? 'MochiMart'
-                                                                    : event.changedBy?.name || 'MochiMart team'}
-                                                            </p>
-                                                        </div>
-                                                    </li>
-                                                );
-                                            })}
-                                        </ol>
-                                    ) : (
-                                        <p className="rounded-xl border border-dashed border-base-300 p-4 text-sm text-base-content/60">
-                                            No status history is available for this older order. New status changes will be recorded here.
-                                        </p>
-                                    )}
-                                </div>
-
                             </div>
                         );
                     })}
-
                 </div>
             )}
 
             {/* Pagination */}
             {!loading && !error && pagination.totalPages > 1 && (
                 <div className="flex flex-col items-center justify-between gap-4 rounded-2xl border border-base-300 bg-base-100 p-4 sm:flex-row">
-
                     <p className="text-sm text-base-content/60">
                         Page {pagination.currentPage} of {pagination.totalPages}
                         {' · '}
@@ -497,7 +492,6 @@ export function MyOrdersPage() {
                     </p>
 
                     <div className="flex items-center gap-3">
-
                         <button
                             type="button"
                             disabled={page <= 1}
@@ -517,11 +511,308 @@ export function MyOrdersPage() {
                             Next
                             <ChevronRight size={17} />
                         </button>
-
                     </div>
                 </div>
             )}
 
+            {/* Order Details Modal */}
+            {(detailsLoading || selectedOrder || detailsError) && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm sm:p-6">
+                    <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-2xl">
+
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between border-b border-base-300 p-5">
+                            <div>
+                                <p className="text-xs font-bold tracking-widest text-primary">
+                                    MOCHIMART
+                                </p>
+
+                                <h2 className="mt-1 text-xl font-extrabold text-base-content">
+                                    Order Details
+                                </h2>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={handleCloseDetails}
+                                className="rounded-xl border border-base-300 p-2 text-base-content transition hover:bg-base-200"
+                                aria-label="Close order details"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto p-5">
+                            {detailsLoading && (
+                                <div className="flex min-h-64 items-center justify-center">
+                                    <div className="text-center">
+                                        <span className="loading loading-spinner loading-lg text-primary"></span>
+                                        <p className="mt-3 text-sm text-base-content/60">
+                                            Loading order details...
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {!detailsLoading && detailsError && (
+                                <div className="rounded-xl border border-error/30 bg-error/5 p-5 text-center">
+                                    <p className="font-semibold text-error">
+                                        {detailsError}
+                                    </p>
+                                </div>
+                            )}
+
+                            {!detailsLoading && selectedOrder && (
+                                <div className="space-y-6">
+
+                                    {/* Order Status */}
+                                    <div className="rounded-xl border border-base-300 bg-base-200/40 p-4">
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-xs text-base-content/50">
+                                                    ORDER ID
+                                                </p>
+
+                                                <p className="mt-1 break-all font-bold text-base-content">
+                                                    #{selectedOrder._id}
+                                                </p>
+                                            </div>
+
+                                            <span className={`rounded-full px-3 py-1.5 text-xs font-bold capitalize ${statusStyles[selectedOrder.orderStatus] || 'bg-base-200 text-base-content'}`}>
+                                                {selectedOrder.orderStatus}
+                                            </span>
+                                        </div>
+
+                                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                            <div>
+                                                <p className="text-xs text-base-content/50">
+                                                    Order Date
+                                                </p>
+                                                <p className="mt-1 text-sm font-semibold text-base-content">
+                                                    {formatDate(selectedOrder.createdAt)}
+                                                </p>
+                                            </div>
+
+                                            <div>
+                                                <p className="text-xs text-base-content/50">
+                                                    Payment Status
+                                                </p>
+                                                <span className={`mt-1 inline-flex rounded-full px-3 py-1 text-xs font-bold capitalize ${paymentStyles[selectedOrder.paymentStatus] || 'bg-base-200 text-base-content'}`}>
+                                                    {selectedOrder.paymentStatus || 'Unknown'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Customer Information */}
+                                    <section>
+                                        <h3 className="mb-3 flex items-center gap-2 font-bold text-base-content">
+                                            <User size={18} className="text-primary" />
+                                            Customer Information
+                                        </h3>
+
+                                        <div className="grid gap-3 rounded-xl border border-base-300 p-4 sm:grid-cols-2">
+                                            <div className="flex items-start gap-2">
+                                                <User size={16} className="mt-1 text-base-content/50" />
+                                                <div>
+                                                    <p className="text-xs text-base-content/50">Name</p>
+                                                    <p className="text-sm font-semibold text-base-content">
+                                                        {selectedOrder.customer?.name || 'N/A'}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-start gap-2">
+                                                <Phone size={16} className="mt-1 text-base-content/50" />
+                                                <div>
+                                                    <p className="text-xs text-base-content/50">Phone</p>
+                                                    <p className="text-sm font-semibold text-base-content">
+                                                        {selectedOrder.customer?.phone || 'N/A'}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-start gap-2">
+                                                <Mail size={16} className="mt-1 text-base-content/50" />
+                                                <div>
+                                                    <p className="text-xs text-base-content/50">Email</p>
+                                                    <p className="break-all text-sm font-semibold text-base-content">
+                                                        {selectedOrder.customer?.email || 'N/A'}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-start gap-2">
+                                                <MapPin size={16} className="mt-1 text-base-content/50" />
+                                                <div>
+                                                    <p className="text-xs text-base-content/50">Delivery Address</p>
+                                                    <p className="text-sm font-semibold text-base-content">
+                                                        {typeof orderAddress === 'string'
+                                                            ? orderAddress
+                                                            : orderAddress
+                                                                ? Object.values(orderAddress).filter(Boolean).join(', ')
+                                                                : 'N/A'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    {/* Products */}
+                                    <section>
+                                        <h3 className="mb-3 flex items-center gap-2 font-bold text-base-content">
+                                            <ShoppingBag size={18} className="text-primary" />
+                                            Ordered Products
+                                        </h3>
+
+                                        <div className="space-y-3">
+                                            {(selectedOrder.items || []).map((item, index) => (
+                                                <div
+                                                    key={item.productId?.toString() || index}
+                                                    className="flex items-center justify-between gap-4 rounded-xl border border-base-300 p-4"
+                                                >
+                                                    <div>
+                                                        <p className="font-semibold text-base-content">
+                                                            {item.name || 'Product'}
+                                                        </p>
+
+                                                        <p className="mt-1 text-xs text-base-content/50">
+                                                            Quantity: {item.quantity} × {formatCurrency(item.price)}
+                                                        </p>
+                                                    </div>
+
+                                                    <p className="shrink-0 font-bold text-primary">
+                                                        {formatCurrency(item.lineTotal ?? item.price * item.quantity)}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </section>
+
+                                    {/* Payment Summary */}
+                                    <section className="rounded-xl border border-base-300 p-4">
+                                        <h3 className="mb-3 flex items-center gap-2 font-bold text-base-content">
+                                            <CreditCard size={18} className="text-primary" />
+                                            Payment Summary
+                                        </h3>
+
+                                        <div className="space-y-2 text-sm">
+                                            <div className="flex justify-between gap-3">
+                                                <span className="text-base-content/60">Subtotal</span>
+                                                <span className="font-semibold text-base-content">
+                                                    {formatCurrency(selectedOrder.subtotal)}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex justify-between gap-3">
+                                                <span className="text-base-content/60">Delivery Charge</span>
+                                                <span className="font-semibold text-base-content">
+                                                    {formatCurrency(selectedOrder.deliveryCharge)}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex justify-between gap-3 border-t border-base-300 pt-3">
+                                                <span className="font-bold text-base-content">Total</span>
+                                                <span className="text-lg font-extrabold text-primary">
+                                                    {formatCurrency(selectedOrder.total)}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-base-300 pt-3">
+                                            <span className="text-sm text-base-content/60">
+                                                Payment Method
+                                            </span>
+                                            <span className="text-sm font-bold text-base-content">
+                                                {selectedOrder.paymentMethod === 'COD'
+                                                    ? 'Cash on Delivery'
+                                                    : selectedOrder.paymentMethod || 'N/A'}
+                                            </span>
+                                        </div>
+                                    </section>
+
+                                    {/* Order Status History */}
+                                    <section>
+                                        <h3 className="mb-4 flex items-center gap-2 font-bold text-base-content">
+                                            <Clock size={18} className="text-primary" />
+                                            Order Status History
+                                        </h3>
+
+                                        {selectedOrder.statusHistory?.length > 0 ? (
+                                            <div className="space-y-4">
+                                                {selectedOrder.statusHistory.map((event, index) => (
+                                                    <div
+                                                        key={`${event.changedAt}-${index}`}
+                                                        className="flex gap-3"
+                                                    >
+                                                        <div className="flex flex-col items-center">
+                                                            <div className="mt-1 h-3 w-3 rounded-full bg-primary ring-4 ring-primary/10" />
+                                                            {index !== selectedOrder.statusHistory.length - 1 && (
+                                                                <div className="mt-2 min-h-10 w-px bg-base-300" />
+                                                            )}
+                                                        </div>
+
+                                                        <div className="min-w-0 flex-1 rounded-xl border border-base-300 p-3">
+                                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                <p className="text-sm font-bold capitalize text-base-content">
+                                                                    {event.toStatus || 'Status updated'}
+                                                                </p>
+
+                                                                <p className="text-xs text-base-content/50">
+                                                                    {formatDate(event.changedAt)}
+                                                                </p>
+                                                            </div>
+
+                                                            {event.note && (
+                                                                <p className="mt-1 text-sm text-base-content/60">
+                                                                    {event.note}
+                                                                </p>
+                                                            )}
+
+                                                            {event.changedBy?.name && (
+                                                                <p className="mt-2 text-xs text-base-content/40">
+                                                                    Updated by: {event.changedBy.name}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="rounded-xl border border-base-300 p-4 text-sm text-base-content/50">
+                                                No status history available.
+                                            </p>
+                                        )}
+                                    </section>
+
+                                    {/* Delivery Information */}
+                                    <div className="flex items-center gap-3 rounded-xl bg-secondary p-4">
+                                        <Truck size={23} className="shrink-0 text-primary" />
+                                        <div>
+                                            <p className="font-bold text-base-content">
+                                                Thank you for shopping with MochiMart!
+                                            </p>
+                                            <p className="mt-1 text-xs text-base-content/60">
+                                                You can check this page to follow your order progress.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end border-t border-base-300 p-4">
+                            <button
+                                type="button"
+                                onClick={handleCloseDetails}
+                                className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-content transition hover:brightness-95"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

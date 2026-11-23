@@ -30,6 +30,14 @@ const ORDER_STATUS_TRANSITIONS = {
     cancelled: []
 };
 
+// Notification messages
+const ORDER_NOTIFICATION_MESSAGES = {
+    processing: 'Your order is now being processed.',
+    shipped: 'Great news! Your order has been shipped.',
+    delivered: 'Your order has been delivered successfully.',
+    cancelled: 'Your order has been cancelled.'
+};
+
 // Escape special regex characters
 function escapeRegex(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -328,6 +336,7 @@ async function getOrderDetails(req, res, next) {
 
 // ========================================
 // Update Order Status + Status History
+// + Customer Notification
 // PATCH /api/admin/orders/:id/status
 // ========================================
 
@@ -451,6 +460,34 @@ async function updateOrderStatus(req, res, next) {
                 { session }
             );
 
+            // ========================================
+            // Create Customer Notification
+            // ========================================
+
+            // Only registered customers receive notifications.
+            // Guest orders do not have a userId.
+            if (order.userId) {
+                const notification = {
+                    userId: order.userId,
+                    orderId: orderId.toString(),
+                    type: 'order_status',
+                    title: 'Order Status Updated',
+                    message:
+                        ORDER_NOTIFICATION_MESSAGES[orderStatus] ||
+                        `Your order status is now ${orderStatus}.`,
+                    orderStatus,
+                    isRead: false,
+                    createdAt: changedAt,
+                    readAt: null
+                };
+
+                await db.collection('notifications').insertOne(
+                    notification,
+                    { session }
+                );
+            }
+
+            // Get updated order
             updatedOrder = await db.collection('orders').findOne(
                 { _id: orderId },
                 { session }
