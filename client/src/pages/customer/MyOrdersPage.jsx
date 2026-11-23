@@ -417,6 +417,68 @@ export function MyOrdersPage() {
 
                                 </div>
 
+                                {/* Order Status Timeline */}
+                                <div className="border-t border-base-300 bg-base-200/40 p-5">
+                                    <div className="mb-4 flex items-center justify-between gap-3">
+                                        <div>
+                                            <h3 className="font-bold text-base-content">
+                                                Order Status History
+                                            </h3>
+                                            <p className="mt-1 text-xs text-base-content/50">
+                                                Updates made to this order
+                                            </p>
+                                        </div>
+                                        <span className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${statusStyles[order.orderStatus] || 'bg-base-200 text-base-content'}`}>
+                                            {order.orderStatus || 'Unknown'}
+                                        </span>
+                                    </div>
+
+                                    {Array.isArray(order.statusHistory) && order.statusHistory.length > 0 ? (
+                                        <ol className="space-y-0">
+                                            {order.statusHistory.map((event, index) => {
+                                                const isLast = index === order.statusHistory.length - 1;
+                                                const eventStatus = event.toStatus || 'updated';
+
+                                                return (
+                                                    <li
+                                                        key={`${event.changedAt || index}-${index}`}
+                                                        className="relative flex gap-3 pb-5 last:pb-0"
+                                                    >
+                                                        {!isLast && (
+                                                            <span className="absolute left-[9px] top-5 h-full w-px bg-base-300" />
+                                                        )}
+                                                        <span className={`relative z-10 mt-1 h-5 w-5 shrink-0 rounded-full border-2 border-base-100 ${isLast ? 'bg-primary' : 'bg-base-300'}`} />
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                <p className="text-sm font-bold capitalize text-base-content">
+                                                                    {eventStatus === 'pending' ? 'Order Placed' : eventStatus}
+                                                                </p>
+                                                                <span className="text-xs text-base-content/50">
+                                                                    {formatDate(event.changedAt)}
+                                                                </span>
+                                                            </div>
+                                                            {event.note && (
+                                                                <p className="mt-1 text-xs text-base-content/60">
+                                                                    {event.note}
+                                                                </p>
+                                                            )}
+                                                            <p className="mt-1 text-xs text-base-content/50">
+                                                                Updated by {event.changedBy?.type === 'system'
+                                                                    ? 'MochiMart'
+                                                                    : event.changedBy?.name || 'MochiMart team'}
+                                                            </p>
+                                                        </div>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ol>
+                                    ) : (
+                                        <p className="rounded-xl border border-dashed border-base-300 p-4 text-sm text-base-content/60">
+                                            No status history is available for this older order. New status changes will be recorded here.
+                                        </p>
+                                    )}
+                                </div>
+
                             </div>
                         );
                     })}

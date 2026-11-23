@@ -21,12 +21,25 @@ const PAYMENT_STATUSES = [
     'refunded'
 ];
 
+// Allowed order status transitions
+const ORDER_STATUS_TRANSITIONS = {
+    pending: ['processing', 'cancelled'],
+    processing: ['shipped', 'cancelled'],
+    shipped: ['delivered'],
+    delivered: [],
+    cancelled: []
+};
+
 // Escape special regex characters
 function escapeRegex(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// ========================================
 // Dashboard Statistics
+// GET /api/admin/dashboard
+// ========================================
+
 async function getDashboard(req, res, next) {
     try {
         const db = getDb();
@@ -51,12 +64,17 @@ async function getDashboard(req, res, next) {
             totalUsers,
             pendingOrders
         });
+
     } catch (error) {
         next(error);
     }
 }
 
+// ========================================
 // Get Admin Profile
+// GET /api/admin/profile
+// ========================================
+
 async function getAdminProfile(req, res, next) {
     try {
         const db = getDb();
@@ -80,17 +98,27 @@ async function getAdminProfile(req, res, next) {
                 photoPublicId: profile.photoPublicId || ''
             }
         });
+
     } catch (error) {
         next(error);
     }
 }
 
+// ========================================
 // Update Admin Profile
+// PATCH /api/admin/profile
+// ========================================
+
 async function updateAdminProfile(req, res, next) {
     try {
         const db = getDb();
 
-        const { name, phone, photoURL, photoPublicId } = req.body;
+        const {
+            name,
+            phone,
+            photoURL,
+            photoPublicId
+        } = req.body;
 
         if (
             typeof name !== 'string' ||
@@ -121,6 +149,7 @@ async function updateAdminProfile(req, res, next) {
                 ) {
                     throw new Error('Invalid URL');
                 }
+
             } catch {
                 return res.status(400).json({
                     error: 'Invalid profile image URL.'
@@ -170,12 +199,17 @@ async function updateAdminProfile(req, res, next) {
                 photoPublicId: updatedProfile.photoPublicId || ''
             }
         });
+
     } catch (error) {
         next(error);
     }
 }
 
+// ========================================
 // Get All Orders
+// GET /api/admin/orders
+// ========================================
+
 async function getAllOrders(req, res, next) {
     try {
         const db = getDb();
@@ -188,7 +222,11 @@ async function getAllOrders(req, res, next) {
             ? req.query.status
             : '';
 
-        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const page = Math.max(
+            1,
+            parseInt(req.query.page, 10) || 1
+        );
+
         const limit = Math.min(
             50,
             Math.max(1, parseInt(req.query.limit, 10) || 10)
@@ -207,7 +245,10 @@ async function getAllOrders(req, res, next) {
         }
 
         if (search) {
-            const searchRegex = new RegExp(escapeRegex(search), 'i');
+            const searchRegex = new RegExp(
+                escapeRegex(search),
+                'i'
+            );
 
             const searchConditions = [
                 { 'customer.name': searchRegex },
@@ -245,12 +286,17 @@ async function getAllOrders(req, res, next) {
                 totalPages: Math.ceil(totalOrders / limit)
             }
         });
+
     } catch (error) {
         next(error);
     }
 }
 
+// ========================================
 // Get Single Order Details
+// GET /api/admin/orders/:id
+// ========================================
+
 async function getOrderDetails(req, res, next) {
     try {
         const { id } = req.params;
@@ -274,12 +320,17 @@ async function getOrderDetails(req, res, next) {
         }
 
         res.json({ order });
+
     } catch (error) {
         next(error);
     }
 }
 
-// Update Order Status
+// ========================================
+// Update Order Status + Status History
+// PATCH /api/admin/orders/:id/status
+// ========================================
+
 async function updateOrderStatus(req, res, next) {
     const session = getClient().startSession();
 
@@ -316,26 +367,30 @@ async function updateOrderStatus(req, res, next) {
                 throw error;
             }
 
-            if (order.orderStatus === 'cancelled') {
+            const currentStatus = order.orderStatus || 'pending';
+
+            const allowedNextStatuses =
+                ORDER_STATUS_TRANSITIONS[currentStatus] || [];
+
+            if (orderStatus === currentStatus) {
                 const error = new Error(
-                    'A cancelled order cannot be updated.'
+                    'Order already has this status.'
                 );
+
                 error.status = 409;
                 throw error;
             }
 
-            if (
-                orderStatus === 'cancelled' &&
-                order.orderStatus === 'delivered'
-            ) {
+            if (!allowedNextStatuses.includes(orderStatus)) {
                 const error = new Error(
-                    'A delivered order cannot be cancelled.'
+                    `Invalid order status transition: ${currentStatus} → ${orderStatus}.`
                 );
+
                 error.status = 409;
                 throw error;
             }
 
-            // Restore product stock when cancelling an order
+            // Restore product stock when cancelling before shipment
             if (orderStatus === 'cancelled') {
                 const stockOperations = (order.items || [])
                     .filter(item =>
@@ -345,10 +400,16 @@ async function updateOrderStatus(req, res, next) {
                     )
                     .map(item => ({
                         updateOne: {
-                            filter: { _id: item.productId },
+                            filter: {
+                                _id: item.productId
+                            },
                             update: {
-                                $inc: { stock: item.quantity },
-                                $set: { updatedAt: new Date() }
+                                $inc: {
+                                    stock: item.quantity
+                                },
+                                $set: {
+                                    updatedAt: new Date()
+                                }
                             }
                         }
                     }));
@@ -361,12 +422,30 @@ async function updateOrderStatus(req, res, next) {
                 }
             }
 
+            // Record status change
+            const changedAt = new Date();
+
             await db.collection('orders').updateOne(
                 { _id: orderId },
                 {
                     $set: {
                         orderStatus,
-                        updatedAt: new Date()
+                        updatedAt: changedAt
+                    },
+                    $push: {
+                        statusHistory: {
+                            fromStatus: currentStatus,
+                            toStatus: orderStatus,
+                            changedAt,
+                            changedBy: {
+                                type: 'admin',
+                                uid: req.user.uid,
+                                name: req.user.email || 'Admin'
+                            },
+                            note: orderStatus === 'cancelled'
+                                ? 'Order cancelled by admin'
+                                : `Order status changed to ${orderStatus}`
+                        }
                     }
                 },
                 { session }
@@ -382,14 +461,20 @@ async function updateOrderStatus(req, res, next) {
             message: 'Order status updated successfully.',
             order: updatedOrder
         });
+
     } catch (error) {
         next(error);
+
     } finally {
         await session.endSession();
     }
 }
 
+// ========================================
 // Update Payment Status
+// PATCH /api/admin/orders/:id/payment
+// ========================================
+
 async function updatePaymentStatus(req, res, next) {
     try {
         const { id } = req.params;
@@ -432,12 +517,16 @@ async function updatePaymentStatus(req, res, next) {
             message: 'Payment status updated successfully.',
             order: result
         });
+
     } catch (error) {
         next(error);
     }
 }
 
+// ========================================
 // Dashboard Route
+// ========================================
+
 adminRouter.get(
     '/dashboard',
     requireAuth,
@@ -445,7 +534,10 @@ adminRouter.get(
     getDashboard
 );
 
-// Profile Routes
+// ========================================
+// Admin Profile Routes
+// ========================================
+
 adminRouter.get(
     '/profile',
     requireAuth,
@@ -460,7 +552,10 @@ adminRouter.patch(
     updateAdminProfile
 );
 
+// ========================================
 // Order Management Routes
+// ========================================
+
 adminRouter.get(
     '/orders',
     requireAuth,

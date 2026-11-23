@@ -37,7 +37,10 @@ async function optionalAuth(req, res, next) {
 
         next();
     } catch (error) {
-        console.error('Optional order authentication failed:', error.code || error.name);
+        console.error(
+            'Optional order authentication failed:',
+            error.code || error.name
+        );
 
         return res.status(401).json({
             error: 'Invalid or expired authentication token.'
@@ -208,6 +211,8 @@ orderRouter.post('/', optionalAuth, async (req, res, next) => {
             const deliveryCharge = 60;
             const total = subtotal + deliveryCharge;
 
+            const orderCreatedAt = new Date();
+
             const order = {
                 // Registered customer association
                 userId: req.orderUser?.uid || null,
@@ -232,8 +237,23 @@ orderRouter.post('/', optionalAuth, async (req, res, next) => {
                 paymentStatus: 'pending',
                 orderStatus: 'pending',
 
-                createdAt: new Date(),
-                updatedAt: new Date()
+                // Initial order status history
+                statusHistory: [
+                    {
+                        fromStatus: null,
+                        toStatus: 'pending',
+                        changedAt: orderCreatedAt,
+                        changedBy: {
+                            type: 'system',
+                            uid: null,
+                            name: 'MochiMart'
+                        },
+                        note: 'Order placed'
+                    }
+                ],
+
+                createdAt: orderCreatedAt,
+                updatedAt: orderCreatedAt
             };
 
             const result = await db.collection('orders')
@@ -283,9 +303,13 @@ orderRouter.get('/my-orders', requireAuth, async (req, res, next) => {
 
         if (
             typeof req.query.status === 'string' &&
-            ['pending', 'processing', 'shipped', 'delivered', 'cancelled'].includes(
-                req.query.status
-            )
+            [
+                'pending',
+                'processing',
+                'shipped',
+                'delivered',
+                'cancelled'
+            ].includes(req.query.status)
         ) {
             filter.orderStatus = req.query.status;
         }

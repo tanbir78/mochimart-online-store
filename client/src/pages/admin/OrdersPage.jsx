@@ -20,6 +20,14 @@ const PAYMENT_STATUSES = [
     'refunded'
 ];
 
+const ORDER_STATUS_TRANSITIONS = {
+    pending: ['processing', 'cancelled'],
+    processing: ['shipped', 'cancelled'],
+    shipped: ['delivered'],
+    delivered: [],
+    cancelled: []
+};
+
 const statusColors = {
     pending: 'badge-warning',
     processing: 'badge-info',
@@ -62,6 +70,8 @@ function getErrorMessage(error) {
 export default function OrdersPage() {
     const [orders, setOrders] = useState([]);
     const [selectedOrder, setSelectedOrder] = useState(null);
+    const [orderStatusDraft, setOrderStatusDraft] = useState('');
+    const [paymentStatusDraft, setPaymentStatusDraft] = useState('');
 
     const [search, setSearch] = useState('');
     const [status, setStatus] = useState('');
@@ -166,6 +176,8 @@ export default function OrdersPage() {
             }
 
             setSelectedOrder(data.order);
+            setOrderStatusDraft(data.order.orderStatus || 'pending');
+            setPaymentStatusDraft(data.order.paymentStatus || 'pending');
         } catch (error) {
             Swal.fire({
                 icon: 'error',
@@ -181,16 +193,23 @@ export default function OrdersPage() {
 
     const updateOrder = async (id, field, value) => {
         const isOrderStatus = field === 'orderStatus';
+        const isCancellation = isOrderStatus && value === 'cancelled';
 
         const result = await Swal.fire({
-            title: isOrderStatus
-                ? 'Update Order Status?'
-                : 'Update Payment Status?',
-            text: `Change status to "${value}"?`,
+            title: isCancellation
+                ? 'Cancel This Order?'
+                : isOrderStatus
+                    ? 'Update Order Status?'
+                    : 'Update Payment Status?',
+            text: isCancellation
+                ? 'This will cancel the order and restore its product stock. This action cannot be undone.'
+                : `Change ${isOrderStatus ? 'order' : 'payment'} status to "${value}"?`,
             icon: 'question',
             showCancelButton: true,
-            confirmButtonText: 'Yes, Update',
-            cancelButtonText: 'Cancel',
+            confirmButtonText: isCancellation ? 'Yes, Cancel Order' : 'Yes, Update',
+            cancelButtonText: 'Keep Order',
+            confirmButtonColor: isCancellation ? '#dc2626' : '#F28C28',
+            reverseButtons: true,
             customClass: {
                 popup: 'mochi-swal-popup',
                 title: 'mochi-swal-title',
@@ -245,6 +264,8 @@ export default function OrdersPage() {
 
             if (selectedOrder?._id === id) {
                 setSelectedOrder(data.order);
+                setOrderStatusDraft(data.order.orderStatus || 'pending');
+                setPaymentStatusDraft(data.order.paymentStatus || 'pending');
             }
         } catch (error) {
             Swal.fire({
@@ -585,49 +606,119 @@ export default function OrdersPage() {
                             </table>
                         </div>
 
-                        {/* Update Status */}
-                        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <div>
-                                <label className="mb-2 block text-sm font-semibold">
-                                    Update Order Status
-                                </label>
+                        {/* Order Status History */}
+                        <div className="mt-6 rounded-xl border border-base-300 bg-base-200/40 p-4">
+                            <div className="mb-4">
+                                <h4 className="font-semibold text-base-content">
+                                    Order Status History
+                                </h4>
+                                <p className="mt-1 text-xs text-base-content/60">
+                                    Complete record of order status changes
+                                </p>
+                            </div>
 
+                            {Array.isArray(selectedOrder.statusHistory) && selectedOrder.statusHistory.length > 0 ? (
+                                <ol className="space-y-0">
+                                    {selectedOrder.statusHistory.map((event, index) => {
+                                        const isLast = index === selectedOrder.statusHistory.length - 1;
+                                        const eventStatus = event.toStatus || 'updated';
+
+                                        return (
+                                            <li
+                                                key={`${event.changedAt || index}-${index}`}
+                                                className="relative flex gap-3 pb-5 last:pb-0"
+                                            >
+                                                {!isLast && (
+                                                    <span className="absolute left-[9px] top-5 h-full w-px bg-base-300" />
+                                                )}
+                                                <span className={`relative z-10 mt-1 h-5 w-5 shrink-0 rounded-full border-2 border-base-100 ${isLast ? 'bg-primary' : 'bg-base-300'}`} />
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                                        <p className="text-sm font-semibold capitalize text-base-content">
+                                                            {eventStatus === 'pending' ? 'Order Placed' : eventStatus}
+                                                        </p>
+                                                        <span className="text-xs text-base-content/50">
+                                                            {formatDate(event.changedAt)}
+                                                        </span>
+                                                    </div>
+                                                    {event.fromStatus && (
+                                                        <p className="mt-1 text-xs text-base-content/60">
+                                                            {event.fromStatus} → {event.toStatus}
+                                                        </p>
+                                                    )}
+                                                    {event.note && (
+                                                        <p className="mt-1 text-xs text-base-content/60">
+                                                            {event.note}
+                                                        </p>
+                                                    )}
+                                                    <p className="mt-1 text-xs text-base-content/50">
+                                                        By {event.changedBy?.name || (event.changedBy?.type === 'system' ? 'MochiMart' : 'Admin')}
+                                                    </p>
+                                                </div>
+                                            </li>
+                                        );
+                                    })}
+                                </ol>
+                            ) : (
+                                <p className="rounded-lg border border-dashed border-base-300 p-4 text-sm text-base-content/60">
+                                    No status history is available for this older order. New status changes will be recorded here.
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Order and Payment Status Controls */}
+                        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div className="rounded-xl border border-base-300 bg-base-100 p-4">
+                                <label className="mb-2 block text-sm font-semibold">
+                                    Order Status
+                                </label>
+                                <div className="mb-3 flex items-center gap-2">
+                                    <span className={`badge ${statusColors[selectedOrder.orderStatus] || 'badge-ghost'}`}>
+                                        {selectedOrder.orderStatus || 'pending'}
+                                    </span>
+                                </div>
                                 <select
                                     className="select select-bordered w-full"
-                                    value={selectedOrder.orderStatus}
-                                    disabled={updating}
-                                    onChange={(event) =>
-                                        updateOrder(
-                                            selectedOrder._id,
-                                            'orderStatus',
-                                            event.target.value
-                                        )
-                                    }
+                                    value={orderStatusDraft}
+                                    disabled={updating || !(ORDER_STATUS_TRANSITIONS[selectedOrder.orderStatus || 'pending'] || []).length}
+                                    onChange={(event) => setOrderStatusDraft(event.target.value)}
                                 >
-                                    {ORDER_STATUSES.map((item) => (
+                                    <option value={selectedOrder.orderStatus || 'pending'}>
+                                        Keep current status ({selectedOrder.orderStatus || 'pending'})
+                                    </option>
+                                    {(ORDER_STATUS_TRANSITIONS[selectedOrder.orderStatus || 'pending'] || []).map((item) => (
                                         <option key={item} value={item}>
                                             {item.charAt(0).toUpperCase() + item.slice(1)}
                                         </option>
                                     ))}
                                 </select>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary mt-3 w-full text-white"
+                                    disabled={updating || !orderStatusDraft || orderStatusDraft === selectedOrder.orderStatus}
+                                    onClick={() => updateOrder(selectedOrder._id, 'orderStatus', orderStatusDraft)}
+                                >
+                                    {updating ? <span className="loading loading-spinner loading-xs" /> : 'Update Order Status'}
+                                </button>
+                                <p className="mt-2 text-xs text-base-content/60">
+                                    Status moves forward only. Shipped orders cannot be cancelled.
+                                </p>
                             </div>
 
-                            <div>
+                            <div className="rounded-xl border border-base-300 bg-base-100 p-4">
                                 <label className="mb-2 block text-sm font-semibold">
-                                    Update Payment Status
+                                    Payment Status
                                 </label>
-
+                                <div className="mb-3 flex items-center gap-2">
+                                    <span className={`badge ${paymentColors[selectedOrder.paymentStatus] || 'badge-ghost'}`}>
+                                        {selectedOrder.paymentStatus || 'pending'}
+                                    </span>
+                                </div>
                                 <select
                                     className="select select-bordered w-full"
-                                    value={selectedOrder.paymentStatus}
+                                    value={paymentStatusDraft}
                                     disabled={updating}
-                                    onChange={(event) =>
-                                        updateOrder(
-                                            selectedOrder._id,
-                                            'paymentStatus',
-                                            event.target.value
-                                        )
-                                    }
+                                    onChange={(event) => setPaymentStatusDraft(event.target.value)}
                                 >
                                     {PAYMENT_STATUSES.map((item) => (
                                         <option key={item} value={item}>
@@ -635,6 +726,17 @@ export default function OrdersPage() {
                                         </option>
                                     ))}
                                 </select>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary mt-3 w-full text-white"
+                                    disabled={updating || !paymentStatusDraft || paymentStatusDraft === (selectedOrder.paymentStatus || 'pending')}
+                                    onClick={() => updateOrder(selectedOrder._id, 'paymentStatus', paymentStatusDraft)}
+                                >
+                                    {updating ? <span className="loading loading-spinner loading-xs" /> : 'Update Payment Status'}
+                                </button>
+                                <p className="mt-2 text-xs text-base-content/60">
+                                    Update payment separately from the order delivery status.
+                                </p>
                             </div>
                         </div>
 
