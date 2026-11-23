@@ -2,11 +2,56 @@
 import { Router } from 'express';
 import { ObjectId } from 'mongodb';
 import { getDb, getClient } from '../config/database.js';
+import { verifyFirebaseToken } from '../config/firebase.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export const orderRouter = Router();
 
-// Create a new order with stock management
-orderRouter.post('/', async (req, res, next) => {
+// ========================================
+// Optional Firebase Authentication
+// Guest checkout is also allowed
+// ========================================
+
+async function optionalAuth(req, res, next) {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader) {
+        req.orderUser = null;
+        return next();
+    }
+
+    if (!authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({
+            error: 'Invalid authorization header.'
+        });
+    }
+
+    try {
+        const token = authHeader.slice(7);
+        const decoded = await verifyFirebaseToken(token);
+
+        req.orderUser = {
+            uid: decoded.uid,
+            email: decoded.email || ''
+        };
+
+        next();
+    } catch (error) {
+        console.error('Optional order authentication failed:', error.code || error.name);
+
+        return res.status(401).json({
+            error: 'Invalid or expired authentication token.'
+        });
+    }
+}
+
+// ========================================
+// Create a New Order
+// POST /api/orders
+// Guest and Registered Customer Checkout
+// ========================================
+
+orderRouter.post('/', optionalAuth, async (req, res, next) => {
     const session = getClient().startSession();
 
     try {
@@ -64,7 +109,6 @@ orderRouter.post('/', async (req, res, next) => {
         }
 
         const db = getDb();
-
         let createdOrder;
 
         // Start MongoDB transaction
@@ -73,7 +117,7 @@ orderRouter.post('/', async (req, res, next) => {
                 .find(
                     {
                         _id: {
-                            $in: productIds.map((id) => new ObjectId(id))
+                            $in: productIds.map(id => new ObjectId(id))
                         },
                         active: true
                     },
@@ -95,7 +139,7 @@ orderRouter.post('/', async (req, res, next) => {
             // Validate stock and calculate subtotal
             for (const item of items) {
                 const product = products.find(
-                    (p) => p._id.toString() === item.productId
+                    p => p._id.toString() === item.productId
                 );
 
                 if (
@@ -165,12 +209,17 @@ orderRouter.post('/', async (req, res, next) => {
             const total = subtotal + deliveryCharge;
 
             const order = {
+                // Registered customer association
+                userId: req.orderUser?.uid || null,
+
                 customer: {
                     name: customer.name.trim(),
                     phone: customer.phone.trim(),
-                    email: typeof customer.email === 'string'
-                        ? customer.email.trim()
-                        : '',
+                    email: req.orderUser?.email || (
+                        typeof customer.email === 'string'
+                            ? customer.email.trim()
+                            : ''
+                    ),
                     address: customer.address.trim()
                 },
 
@@ -208,3 +257,106 @@ orderRouter.post('/', async (req, res, next) => {
         await session.endSession();
     }
 });
+
+// ========================================
+// Get Logged-in Customer's Orders
+// GET /api/orders/my-orders
+// ========================================
+
+orderRouter.get('/my-orders', requireAuth, async (req, res, next) => {
+    try {
+        if (req.user.role !== 'customer') {
+            return res.status(403).json({
+                error: 'Customer access required.'
+            });
+        }
+
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(
+            50,
+            Math.max(1, parseInt(req.query.limit, 10) || 10)
+        );
+
+        const filter = {
+            userId: req.user.uid
+        };
+
+        if (
+            typeof req.query.status === 'string' &&
+            ['pending', 'processing', 'shipped', 'delivered', 'cancelled'].includes(
+                req.query.status
+            )
+        ) {
+            filter.orderStatus = req.query.status;
+        }
+
+        const ordersCollection = getDb().collection('orders');
+
+        const [orders, totalOrders] = await Promise.all([
+            ordersCollection
+                .find(filter)
+                .sort({ createdAt: -1 })
+                .skip((page - 1) * limit)
+                .limit(limit)
+                .toArray(),
+
+            ordersCollection.countDocuments(filter)
+        ]);
+
+        return res.json({
+            orders,
+            pagination: {
+                currentPage: page,
+                totalPages: Math.ceil(totalOrders / limit),
+                totalOrders,
+                limit
+            }
+        });
+
+    } catch (error) {
+        next(error);
+    }
+});
+
+// ========================================
+// Get Customer Order Details
+// GET /api/orders/my-orders/:id
+// ========================================
+
+orderRouter.get(
+    '/my-orders/:id',
+    requireAuth,
+    async (req, res, next) => {
+        try {
+            if (req.user.role !== 'customer') {
+                return res.status(403).json({
+                    error: 'Customer access required.'
+                });
+            }
+
+            const { id } = req.params;
+
+            if (!ObjectId.isValid(id)) {
+                return res.status(400).json({
+                    error: 'Invalid order ID.'
+                });
+            }
+
+            const order = await getDb().collection('orders').findOne({
+                _id: new ObjectId(id),
+                userId: req.user.uid
+            });
+
+            if (!order) {
+                return res.status(404).json({
+                    error: 'Order not found.'
+                });
+            }
+
+            return res.json({ order });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+);

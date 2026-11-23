@@ -1,6 +1,9 @@
 
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { onAuthStateChanged } from 'firebase/auth';
+
+import { auth } from '../../config/firebase';
 import {
     getCart,
     updateCartQuantity,
@@ -10,29 +13,46 @@ import {
 export function CartPage() {
     const [cart, setCart] = useState([]);
 
+    // Load cart whenever authentication or cart data changes
     useEffect(() => {
-        setCart(getCart());
-
-        const handleCartUpdate = () => {
+        const refreshCart = () => {
             setCart(getCart());
         };
 
-        window.addEventListener('cartUpdated', handleCartUpdate);
+        // Initial cart load
+        refreshCart();
+
+        // Refresh after Firebase authentication is resolved or changed
+        const unsubscribeAuth = onAuthStateChanged(auth, () => {
+            refreshCart();
+        });
+
+        // Refresh after add, update, remove or merge operations
+        window.addEventListener('cartUpdated', refreshCart);
+
+        // Refresh when browser tab becomes active
+        window.addEventListener('focus', refreshCart);
 
         return () => {
-            window.removeEventListener('cartUpdated', handleCartUpdate);
+            unsubscribeAuth();
+            window.removeEventListener('cartUpdated', refreshCart);
+            window.removeEventListener('focus', refreshCart);
         };
     }, []);
 
+    // Calculate subtotal
     const subtotal = cart.reduce(
-        (total, item) => total + item.price * item.quantity,
+        (total, item) =>
+            total + Number(item.price || 0) * Number(item.quantity || 0),
         0
     );
 
+    // Update quantity
     const handleQuantityChange = (id, quantity) => {
         updateCartQuantity(id, quantity);
     };
 
+    // Remove product
     const handleRemove = (id) => {
         removeFromCart(id);
     };
@@ -41,7 +61,6 @@ export function CartPage() {
     if (cart.length === 0) {
         return (
             <main className="flex min-h-[60vh] items-center justify-center bg-base-100 px-5 py-20 text-center text-base-content">
-
                 <div>
                     <div className="text-7xl">🛒</div>
 
@@ -60,14 +79,12 @@ export function CartPage() {
                         Continue Shopping →
                     </Link>
                 </div>
-
             </main>
         );
     }
 
     return (
         <main className="min-h-screen bg-base-100 px-5 py-12 text-base-content">
-
             <div className="mx-auto max-w-6xl">
 
                 {/* Page Heading */}
@@ -106,7 +123,6 @@ export function CartPage() {
 
                                     {/* Product Image */}
                                     <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-secondary">
-
                                         {image ? (
                                             <img
                                                 src={image}
@@ -116,12 +132,10 @@ export function CartPage() {
                                         ) : (
                                             <span className="text-5xl">🛍️</span>
                                         )}
-
                                     </div>
 
                                     {/* Product Information */}
                                     <div className="flex-1">
-
                                         <h2 className="text-lg font-semibold text-base-content">
                                             {item.name}
                                         </h2>
@@ -133,7 +147,6 @@ export function CartPage() {
                                         <p className="mt-1 text-sm text-base-content/60">
                                             {item.stock} available
                                         </p>
-
                                     </div>
 
                                     {/* Quantity Controls */}
@@ -240,9 +253,9 @@ export function CartPage() {
                     </div>
 
                 </div>
-
             </div>
-
         </main>
     );
 }
+
+export default CartPage;

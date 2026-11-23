@@ -10,7 +10,7 @@ import {
     Sun
 } from 'lucide-react';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 
 import { auth } from '../config/firebase';
@@ -26,6 +26,18 @@ export function ShopLayout() {
     const [currentUser, setCurrentUser] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
 
+    // Update cart count
+    const updateCartCount = useCallback(() => {
+        const cart = getCart();
+
+        const totalItems = cart.reduce(
+            (total, item) => total + Number(item.quantity || 0),
+            0
+        );
+
+        setCartCount(totalItems);
+    }, []);
+
     // Apply theme globally and save preference
     useEffect(() => {
         const theme = dark ? 'dark' : 'light';
@@ -40,32 +52,28 @@ export function ShopLayout() {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
             setAuthLoading(false);
+
+            // Refresh cart after authentication changes.
+            updateCartCount();
         });
 
         return () => unsubscribe();
-    }, []);
+    }, [updateCartCount]);
 
-    // Cart Count
+    // Cart Count Updates
     useEffect(() => {
-        const updateCartCount = () => {
-            const cart = getCart();
-
-            const totalItems = cart.reduce(
-                (total, item) => total + item.quantity,
-                0
-            );
-
-            setCartCount(totalItems);
-        };
-
         updateCartCount();
 
         window.addEventListener('cartUpdated', updateCartCount);
 
+        // Refresh cart when the browser tab becomes active.
+        window.addEventListener('focus', updateCartCount);
+
         return () => {
             window.removeEventListener('cartUpdated', updateCartCount);
+            window.removeEventListener('focus', updateCartCount);
         };
-    }, []);
+    }, [updateCartCount]);
 
     return (
         <div className="min-h-screen bg-base-100 text-base-content">
@@ -132,7 +140,13 @@ export function ShopLayout() {
 
                         {/* Account */}
                         <Link
-                            to={authLoading ? '/login' : currentUser ? '/account' : '/login'}
+                            to={
+                                authLoading
+                                    ? '/login'
+                                    : currentUser
+                                        ? '/account'
+                                        : '/login'
+                            }
                             aria-label="Account"
                             title={currentUser ? 'My Account' : 'Sign In'}
                             className="text-base-content transition-colors hover:text-primary"
@@ -143,7 +157,7 @@ export function ShopLayout() {
                         {/* Cart */}
                         <Link
                             to="/cart"
-                            aria-label="Cart"
+                            aria-label={`Cart with ${cartCount} items`}
                             className="relative text-base-content"
                         >
                             <ShoppingBag size={21} />

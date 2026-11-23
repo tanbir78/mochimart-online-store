@@ -1,10 +1,15 @@
 
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import {
+    signInWithEmailAndPassword,
+    signOut
+} from 'firebase/auth';
 
 import { auth } from '../../config/firebase';
 import MochiMartIcon from '../../components/common/MochiMartIcon';
+import { mergeGuestCartIntoCustomer } from '../../utilities/cart';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export function LoginPage() {
@@ -16,65 +21,80 @@ export function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-   
-async function handleLogin(e) {
-    e.preventDefault();
+    async function handleLogin(e) {
+        e.preventDefault();
 
-    setError('');
-    setLoading(true);
+        setError('');
+        setLoading(true);
 
-    try {
-        const userCredential = await signInWithEmailAndPassword(
-            auth,
-            email.trim(),
-            password
-        );
-
-        const token = await userCredential.user.getIdToken();
-
-        // Get user role from MongoDB
-        const response = await fetch(`${API_URL}/api/auth/me`, {
-            headers: {
-                Authorization: `Bearer ${token}`
-            }
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Unable to verify user account.');
-        }
-
-        const role = data.user?.role;
-
-        if (role === 'admin') {
-            navigate('/admin', { replace: true });
-        } else if (role === 'customer') {
-            navigate('/account', { replace: true });
-        } else {
-            throw new Error('Your account does not have a valid role.');
-        }
-
-    } catch (error) {
-        console.error('Login Error:', error);
-
-        // Sign out if profile verification fails
-        if (auth.currentUser) {
-            await import('firebase/auth').then(({ signOut }) =>
-                signOut(auth)
+        try {
+            // Firebase Login
+            const userCredential = await signInWithEmailAndPassword(
+                auth,
+                email.trim(),
+                password
             );
-        }
 
-        if (error.code === 'auth/invalid-credential') {
-            setError('Invalid email or password.');
-        } else {
-            setError(error.message || 'Login failed. Please try again.');
+            const firebaseUser = userCredential.user;
+            const token = await firebaseUser.getIdToken();
+
+            // Verify user profile and role from MongoDB
+            const response = await fetch(`${API_URL}/api/auth/me`, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.error || 'Unable to verify user account.'
+                );
+            }
+
+            const role = data.user?.role;
+
+            if (role === 'admin') {
+                // Admin cart remains separate.
+                navigate('/admin', { replace: true });
+
+            } else if (role === 'customer') {
+                // Merge guest cart into this customer's cart.
+                mergeGuestCartIntoCustomer(firebaseUser.uid);
+
+                navigate('/account', { replace: true });
+
+            } else {
+                throw new Error(
+                    'Your account does not have a valid role.'
+                );
+            }
+
+        } catch (error) {
+            console.error('Login Error:', error);
+
+            // Sign out if login or profile verification fails.
+            if (auth.currentUser) {
+                try {
+                    await signOut(auth);
+                } catch (signOutError) {
+                    console.error('Sign out error:', signOutError);
+                }
+            }
+
+            if (error.code === 'auth/invalid-credential') {
+                setError('Invalid email or password.');
+            } else {
+                setError(
+                    error.message || 'Login failed. Please try again.'
+                );
+            }
+
+        } finally {
+            setLoading(false);
         }
-    } finally {
-        setLoading(false);
     }
-}
-
 
     return (
         <div className="container max-w-md py-12 sm:py-16">
@@ -162,6 +182,7 @@ async function handleLogin(e) {
                 <p className="mt-5 text-center text-xs text-base-content/50">
                     Secure authentication powered by Firebase.
                 </p>
+
             </div>
         </div>
     );

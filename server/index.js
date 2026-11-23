@@ -6,7 +6,11 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
-import { connectDatabase } from './config/database.js';
+import {
+    connectDatabase,
+    closeDatabase
+} from './config/database.js';
+
 import { initializeFirebaseAdmin } from './config/firebase.js';
 
 import { productRouter } from './routes/products.js';
@@ -17,6 +21,31 @@ import { adminRouter } from './routes/admin.js';
 import { authRouter } from './routes/auth.js';
 
 const app = express();
+
+let server;
+let isShuttingDown = false;
+
+// ========================================
+// Process Error Logging
+// ========================================
+
+process.on('unhandledRejection', (reason) => {
+    console.error(
+        '[UNHANDLED PROMISE REJECTION]',
+        reason
+    );
+});
+
+process.on('uncaughtException', (error) => {
+    console.error(
+        '[UNCAUGHT EXCEPTION]',
+        error
+    );
+
+    // An uncaught exception can leave the process
+    // in an unsafe state. Shut down cleanly.
+    shutdown('uncaughtException');
+});
 
 // ========================================
 // Security Middleware
@@ -38,7 +67,6 @@ const allowedOrigins = (
 app.use(
     cors({
         origin: (origin, callback) => {
-            // Allow requests without an origin (Postman, etc.)
             if (!origin) {
                 return callback(null, true);
             }
@@ -49,12 +77,13 @@ app.use(
                 return callback(null, true);
             }
 
-            console.log('CORS blocked origin:', origin);
+            console.error('[CORS BLOCKED]', origin);
 
             return callback(
                 new Error('Not allowed by CORS')
             );
         },
+
         methods: [
             'GET',
             'POST',
@@ -63,6 +92,7 @@ app.use(
             'DELETE',
             'OPTIONS'
         ],
+
         allowedHeaders: [
             'Content-Type',
             'Authorization'
@@ -82,7 +112,7 @@ app.use(
 );
 
 // ========================================
-// Parse JSON Request Body
+// JSON Body Parser
 // ========================================
 
 app.use(
@@ -106,19 +136,32 @@ app.use(
 );
 
 // ========================================
+// Request Logging (Development Only)
+// ========================================
+
+if (process.env.NODE_ENV !== 'production') {
+    app.use((req, res, next) => {
+        const start = Date.now();
+
+        res.on('finish', () => {
+            console.log(
+                `[API] ${req.method} ${req.originalUrl} - ${res.statusCode} - ${Date.now() - start}ms`
+            );
+        });
+
+        next();
+    });
+}
+
+// ========================================
 // API Routes
 // ========================================
 
 app.use('/api/health', healthRouter);
-
 app.use('/api/auth', authRouter);
-
 app.use('/api/products', productRouter);
-
 app.use('/api/orders', orderRouter);
-
 app.use('/api/uploads', uploadRouter);
-
 app.use('/api/admin', adminRouter);
 
 // ========================================
@@ -136,7 +179,16 @@ app.use((req, res) => {
 // ========================================
 
 app.use((err, req, res, next) => {
-    console.error('Server Error:', err);
+    console.error('[SERVER ERROR]', {
+        method: req.method,
+        url: req.originalUrl,
+        message: err.message,
+        stack: err.stack
+    });
+
+    if (res.headersSent) {
+        return next(err);
+    }
 
     if (err.message === 'Not allowed by CORS') {
         return res.status(403).json({
@@ -144,7 +196,7 @@ app.use((err, req, res, next) => {
         });
     }
 
-    res.status(err.status || 500).json({
+    return res.status(err.status || 500).json({
         error:
             process.env.NODE_ENV === 'production'
                 ? 'Internal server error'
@@ -153,36 +205,84 @@ app.use((err, req, res, next) => {
 });
 
 // ========================================
-// Server Port
+// Health Check
+// ========================================
+
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        service: 'mochimart-api'
+    });
+});
+
+// ========================================
+// Graceful Shutdown
+// ========================================
+
+async function shutdown(signal) {
+    if (isShuttingDown) return;
+
+    isShuttingDown = true;
+
+    console.log(`[SERVER] ${signal} received. Shutting down...`);
+
+    try {
+        if (server) {
+            await new Promise((resolve, reject) => {
+                server.close((error) => {
+                    if (error) reject(error);
+                    else resolve();
+                });
+            });
+        }
+
+        await closeDatabase();
+
+        console.log('[SERVER] Shutdown completed.');
+        process.exit(0);
+
+    } catch (error) {
+        console.error('[SERVER] Shutdown error:', error);
+        process.exit(1);
+    }
+}
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+// ========================================
+// Start Server
 // ========================================
 
 const port = Number(process.env.PORT || 5000);
 
-// ========================================
-// Connect Database and Start Server
-// ========================================
+async function startServer() {
+    try {
+        await connectDatabase();
+
+        initializeFirebaseAdmin();
+
+        server = app.listen(port, () => {
+            console.log('================================');
+            console.log('MochiMart API Server Started');
+            console.log(`Port: ${port}`);
+            console.log('Allowed Origins:', allowedOrigins);
+            console.log('Environment:', process.env.NODE_ENV || 'development');
+            console.log('================================');
+        });
+
+        server.on('error', (error) => {
+            console.error('[HTTP SERVER ERROR]', error);
+        });
+
+    } catch (error) {
+        console.error('[SERVER STARTUP FAILED]', error);
+        process.exit(1);
+    }
+}
 
 if (process.env.NODE_ENV !== 'test') {
-    connectDatabase()
-        .then(() => {
-            initializeFirebaseAdmin();
-
-            app.listen(port, () => {
-                console.log('================================');
-                console.log('MochiMart API Server Started');
-                console.log(`Port: ${port}`);
-                console.log('Allowed Origins:', allowedOrigins);
-                console.log('================================');
-            });
-        })
-        .catch((error) => {
-            console.error(
-                'Server startup failed:',
-                error.message
-            );
-
-            process.exit(1);
-        });
+    startServer();
 }
 
 export default app;

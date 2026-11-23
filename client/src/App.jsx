@@ -17,6 +17,7 @@ import { CustomerRoute } from './components/CustomerRoute.jsx';
 import AccountPage from './pages/customer/AccountPage.jsx';
 import CustomerLayout from './layouts/CustomerLayout.jsx';
 import CustomerSettingsPage from './pages/customer/CustomerSettingsPage.jsx';
+import MyOrdersPage from './pages/customer/MyOrdersPage.jsx';
 
 // Temporary pages for upcoming admin modules
 function AdminPlaceholder({ title }) {
@@ -52,6 +53,7 @@ export default function App() {
             <Route element={<CustomerRoute />}>
                 <Route path="/account" element={<CustomerLayout />}>
                     <Route index element={<AccountPage />} />
+                     <Route path="orders" element={<MyOrdersPage />} />
                     <Route path="settings" element={<CustomerSettingsPage />} />
                 </Route>
             </Route>

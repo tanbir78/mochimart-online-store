@@ -10,6 +10,7 @@ import Swal from 'sweetalert2';
 
 import { auth } from '../../config/firebase';
 import MochiMartIcon from '../../components/common/MochiMartIcon';
+import { mergeGuestCartIntoCustomer } from '../../utilities/cart';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -94,6 +95,14 @@ export function RegisterPage() {
 
             registrationCompleted = true;
 
+            // Step 5: Merge guest cart into the new customer cart
+            try {
+                mergeGuestCartIntoCustomer(firebaseUser.uid);
+            } catch (cartError) {
+                console.error('Cart merge error:', cartError);
+            }
+
+            // Step 6: Show success message
             await Swal.fire({
                 icon: 'success',
                 title: 'Account Created!',
@@ -107,7 +116,7 @@ export function RegisterPage() {
                 }
             });
 
-            // Sign out so the user can use the normal login flow
+            // Step 7: Sign out so the user can use the normal login flow
             const { signOut } = await import('firebase/auth');
             await signOut(auth);
 
@@ -144,6 +153,7 @@ export function RegisterPage() {
             }
 
             setError(message);
+
         } finally {
             setLoading(false);
         }
@@ -277,9 +287,10 @@ export function RegisterPage() {
                 <p className="mt-5 text-center text-xs text-base-content/50">
                     Secure authentication powered by Firebase.
                 </p>
+
             </div>
         </div>
     );
 }
 
-export default RegisterPage
+export default RegisterPage;

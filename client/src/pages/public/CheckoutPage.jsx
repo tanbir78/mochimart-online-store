@@ -1,13 +1,23 @@
 
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { onAuthStateChanged } from 'firebase/auth';
 import Swal from 'sweetalert2';
-import { getCart } from '../../utilities/cart.js';
+
+import { auth } from '../../config/firebase';
+import {
+    getCart,
+    clearCart
+} from '../../utilities/cart.js';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export function CheckoutPage() {
     const navigate = useNavigate();
 
     const [cart, setCart] = useState([]);
+    const [authReady, setAuthReady] = useState(false);
+
     const [customer, setCustomer] = useState({
         name: '',
         phone: '',
@@ -17,13 +27,69 @@ export function CheckoutPage() {
 
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Load active cart and customer profile after Firebase authentication resolves
     useEffect(() => {
-        setCart(getCart());
+        let isMounted = true;
+
+        const refreshCart = () => {
+            if (isMounted) {
+                setCart(getCart());
+            }
+        };
+
+        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+            if (!isMounted) return;
+
+            setAuthReady(true);
+            refreshCart();
+
+            // Prefill customer information for logged-in customers
+            if (user) {
+                try {
+                    const token = await user.getIdToken();
+
+                    const response = await fetch(`${API_URL}/api/auth/me`, {
+                        headers: {
+                            Authorization: `Bearer ${token}`
+                        }
+                    });
+
+                    if (!response.ok) return;
+
+                    const data = await response.json();
+                    const profile = data.user;
+
+                    if (isMounted && profile) {
+                        setCustomer((previous) => ({
+                            ...previous,
+                            name: profile.name || user.displayName || '',
+                            phone: profile.phone || '',
+                            email: profile.email || user.email || ''
+                        }));
+                    }
+                } catch (error) {
+                    console.error('Customer profile loading error:', error);
+                }
+            }
+        });
+
+        const handleCartUpdate = () => {
+            refreshCart();
+        };
+
+        window.addEventListener('cartUpdated', handleCartUpdate);
+
+        return () => {
+            isMounted = false;
+            unsubscribeAuth();
+            window.removeEventListener('cartUpdated', handleCartUpdate);
+        };
     }, []);
 
     // Price Calculation
     const subtotal = cart.reduce(
-        (total, item) => total + item.price * item.quantity,
+        (total, item) =>
+            total + Number(item.price || 0) * Number(item.quantity || 0),
         0
     );
 
@@ -76,22 +142,33 @@ export function CheckoutPage() {
         try {
             setIsSubmitting(true);
 
-            const response = await fetch(
-                'http://localhost:5000/api/orders',
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
+            // Attach Firebase token when a user is logged in.
+            // Guest checkout continues without an Authorization header.
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+
+            if (auth.currentUser) {
+                const token = await auth.currentUser.getIdToken();
+                headers.Authorization = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`${API_URL}/api/orders`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    customer: {
+                        name: customer.name.trim(),
+                        phone: customer.phone.trim(),
+                        email: customer.email.trim(),
+                        address: customer.address.trim()
                     },
-                    body: JSON.stringify({
-                        customer,
-                        items: cart.map((item) => ({
-                            productId: item._id,
-                            quantity: item.quantity
-                        }))
-                    })
-                }
-            );
+                    items: cart.map((item) => ({
+                        productId: item._id,
+                        quantity: item.quantity
+                    }))
+                })
+            });
 
             const data = await response.json();
 
@@ -101,9 +178,8 @@ export function CheckoutPage() {
                 );
             }
 
-            // Clear Cart
-            localStorage.removeItem('mochimart_cart');
-            window.dispatchEvent(new Event('cartUpdated'));
+            // Clear only the currently active guest/customer cart
+            clearCart();
 
             setCart([]);
 
@@ -134,6 +210,15 @@ export function CheckoutPage() {
         } finally {
             setIsSubmitting(false);
         }
+    }
+
+    // Wait until Firebase determines the active user/cart
+    if (!authReady) {
+        return (
+            <div className="flex min-h-[60vh] items-center justify-center bg-base-100">
+                <span className="loading loading-spinner loading-lg text-primary"></span>
+            </div>
+        );
     }
 
     // Empty Cart
@@ -210,6 +295,8 @@ export function CheckoutPage() {
                                 value={customer.name}
                                 onChange={handleChange}
                                 placeholder="Enter your full name"
+                                minLength={2}
+                                maxLength={80}
                                 required
                                 className="input input-bordered w-full bg-base-100 text-base-content"
                             />
@@ -227,6 +314,7 @@ export function CheckoutPage() {
                                 value={customer.phone}
                                 onChange={handleChange}
                                 placeholder="Enter your phone number"
+                                maxLength={30}
                                 required
                                 className="input input-bordered w-full bg-base-100 text-base-content"
                             />
@@ -268,7 +356,7 @@ export function CheckoutPage() {
                         {/* Place Order */}
                         <button
                             type="submit"
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || !authReady}
                             className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-content transition duration-200 hover:-translate-y-0.5 hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {isSubmitting ? (
@@ -308,7 +396,7 @@ export function CheckoutPage() {
 
                                 <p className="font-semibold text-base-content">
                                     ৳{(
-                                        item.price * item.quantity
+                                        Number(item.price) * Number(item.quantity)
                                     ).toLocaleString('en-BD')}
                                 </p>
                             </div>
