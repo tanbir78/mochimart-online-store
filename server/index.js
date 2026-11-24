@@ -19,6 +19,7 @@ import { orderRouter } from './routes/orders.js';
 import { uploadRouter } from './routes/uploads.js';
 import { adminRouter } from './routes/admin.js';
 import { authRouter } from './routes/auth.js';
+import { reviewRouter } from './routes/reviews.js';
 
 const app = express();
 
@@ -42,8 +43,6 @@ process.on('uncaughtException', (error) => {
         error
     );
 
-    // An uncaught exception can leave the process
-    // in an unsafe state. Shut down cleanly.
     shutdown('uncaughtException');
 });
 
@@ -163,6 +162,7 @@ app.use('/api/products', productRouter);
 app.use('/api/orders', orderRouter);
 app.use('/api/uploads', uploadRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/reviews', reviewRouter);
 
 // ========================================
 // 404 Handler

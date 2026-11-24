@@ -3,6 +3,11 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { addToCart } from '../../utilities/cart';
+import { auth } from '../../config/firebase';
+
+const API_URL =
+    import.meta.env.VITE_API_URL ||
+    'http://localhost:5000';
 
 const ProductPage = () => {
     const { id } = useParams();
@@ -13,19 +18,33 @@ const ProductPage = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    // Fetch Product Details
+    // Review States
+    const [reviews, setReviews] = useState([]);
+    const [reviewSummary, setReviewSummary] = useState({
+        averageRating: 0,
+        totalReviews: 0
+    });
+    const [reviewsLoading, setReviewsLoading] = useState(true);
+    const [reviewError, setReviewError] = useState('');
+
+    const [rating, setRating] = useState(5);
+    const [comment, setComment] = useState('');
+    const [reviewSubmitting, setReviewSubmitting] = useState(false);
+
+    // ========================================
+    // Fetch Product Details + Reviews
+    // ========================================
+
     useEffect(() => {
+        let isMounted = true;
+
         const fetchProduct = async () => {
             try {
                 setLoading(true);
                 setError('');
 
-                const apiUrl =
-                    import.meta.env.VITE_API_URL ||
-                    'http://localhost:5000';
-
                 const response = await fetch(
-                    `${apiUrl}/api/products/${id}`
+                    `${API_URL}/api/products/${id}`
                 );
 
                 if (!response.ok) {
@@ -36,6 +55,8 @@ const ProductPage = () => {
 
                 const productData =
                     data.item || data.product || data;
+
+                if (!isMounted) return;
 
                 setProduct(productData);
 
@@ -64,17 +85,72 @@ const ProductPage = () => {
                     '';
 
                 setSelectedImage(imageUrl);
+
+                // Fetch approved reviews
+                const productId = productData._id;
+
+                if (productId) {
+                    setReviewsLoading(true);
+
+                    try {
+                        const reviewResponse = await fetch(
+                            `${API_URL}/api/reviews/${productId}`
+                        );
+
+                        const reviewData = await reviewResponse.json();
+
+                        if (!reviewResponse.ok) {
+                            throw new Error(
+                                reviewData.error || 'Unable to load reviews.'
+                            );
+                        }
+
+                        if (isMounted) {
+                            setReviews(reviewData.reviews || []);
+
+                            setReviewSummary(
+                                reviewData.summary || {
+                                    averageRating: 0,
+                                    totalReviews: 0
+                                }
+                            );
+                        }
+
+                    } catch (reviewErr) {
+                        if (isMounted) {
+                            setReviewError(reviewErr.message);
+                        }
+                    } finally {
+                        if (isMounted) {
+                            setReviewsLoading(false);
+                        }
+                    }
+                } else {
+                    setReviewsLoading(false);
+                }
+
             } catch (err) {
-                setError(err.message || 'Something went wrong');
+                if (isMounted) {
+                    setError(err.message || 'Something went wrong');
+                }
             } finally {
-                setLoading(false);
+                if (isMounted) {
+                    setLoading(false);
+                }
             }
         };
 
         fetchProduct();
+
+        return () => {
+            isMounted = false;
+        };
     }, [id]);
 
-    // SweetAlert2: Add to Cart
+    // ========================================
+    // Add to Cart
+    // ========================================
+
     const handleAddToCart = async () => {
         if (!product || Number(product.stock) <= 0) {
             return;
@@ -107,6 +183,7 @@ const ProductPage = () => {
             if (result.isConfirmed) {
                 navigate('/cart');
             }
+
         } catch (err) {
             Swal.fire({
                 icon: 'error',
@@ -117,11 +194,106 @@ const ProductPage = () => {
         }
     };
 
+    // ========================================
+    // Submit Product Review
+    // ========================================
+
+    const handleSubmitReview = async (event) => {
+        event.preventDefault();
+
+        if (!auth.currentUser) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Login Required',
+                text: 'Please login to submit a product review.',
+                confirmButtonColor: '#F28C28'
+            });
+
+            return;
+        }
+
+        if (!comment.trim() || comment.trim().length < 5) {
+            setReviewError(
+                'Please write at least 5 characters in your review.'
+            );
+            return;
+        }
+
+        if (comment.trim().length > 2000) {
+            setReviewError(
+                'Review cannot exceed 2000 characters.'
+            );
+            return;
+        }
+
+        if (!product?._id) {
+            setReviewError('Product information is unavailable.');
+            return;
+        }
+
+        try {
+            setReviewSubmitting(true);
+            setReviewError('');
+
+            const token = await auth.currentUser.getIdToken();
+
+            const response = await fetch(
+                `${API_URL}/api/reviews/${product._id}`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        rating,
+                        comment: comment.trim()
+                    })
+                }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.error || 'Failed to submit review.'
+                );
+            }
+
+            setComment('');
+            setRating(5);
+
+            await Swal.fire({
+                icon: 'success',
+                title: 'Review Submitted!',
+                text: 'Thank you! Your review has been submitted and is waiting for admin approval.',
+                confirmButtonColor: '#F28C28'
+            });
+
+        } catch (err) {
+            setReviewError(err.message);
+
+            Swal.fire({
+                icon: 'error',
+                title: 'Unable to Submit Review',
+                text: err.message,
+                confirmButtonColor: '#F28C28'
+            });
+
+        } finally {
+            setReviewSubmitting(false);
+        }
+    };
+
+    // ========================================
     // Loading State
+    // ========================================
+
     if (loading) {
         return (
             <div className="flex min-h-[70vh] flex-col items-center justify-center bg-base-100 text-base-content">
                 <span className="loading loading-spinner loading-lg text-primary"></span>
+
                 <p className="mt-4 text-base-content/60">
                     Loading product...
                 </p>
@@ -129,7 +301,10 @@ const ProductPage = () => {
         );
     }
 
+    // ========================================
     // Error State
+    // ========================================
+
     if (error || !product) {
         return (
             <div className="flex min-h-[70vh] flex-col items-center justify-center bg-base-100 px-5 text-center text-base-content">
@@ -153,8 +328,13 @@ const ProductPage = () => {
         );
     }
 
+    // ========================================
     // Prepare Images
-    const images = (Array.isArray(product.images) ? product.images : [])
+    // ========================================
+
+    const images = (
+        Array.isArray(product.images) ? product.images : []
+    )
         .map((image) => {
             if (typeof image === 'string') {
                 return {
@@ -177,11 +357,16 @@ const ProductPage = () => {
         product.compareAtPrice ?? product.compareAt ?? 0
     );
 
+    // ========================================
+    // Render
+    // ========================================
+
     return (
         <main className="min-h-screen bg-base-100 px-5 py-12 text-base-content">
             <div className="mx-auto max-w-6xl">
 
                 {/* Back to Shop */}
+
                 <Link
                     to="/shop"
                     className="mb-8 inline-flex items-center gap-2 font-semibold text-primary transition hover:gap-3"
@@ -190,11 +375,14 @@ const ProductPage = () => {
                     Back to Shop
                 </Link>
 
+                {/* Product Information */}
+
                 <div className="grid gap-10 rounded-3xl border border-base-300 bg-base-100 p-5 shadow-sm md:grid-cols-2 md:p-10">
 
                     {/* Product Images */}
+
                     <div>
-                        {/* Main Image */}
+
                         <div className="flex h-[350px] items-center justify-center overflow-hidden rounded-2xl bg-secondary md:h-[450px]">
                             {currentImage ? (
                                 <img
@@ -208,6 +396,7 @@ const ProductPage = () => {
                         </div>
 
                         {/* Thumbnail Gallery */}
+
                         {images.length > 1 && (
                             <div className="mt-5 grid grid-cols-4 gap-3">
                                 {images.map((image, index) => (
@@ -236,19 +425,44 @@ const ProductPage = () => {
                     </div>
 
                     {/* Product Information */}
+
                     <div className="flex flex-col justify-center">
 
-                        {/* Category */}
                         <p className="text-sm font-bold uppercase tracking-widest text-primary">
                             {product.category || 'General'}
                         </p>
 
-                        {/* Product Name */}
                         <h1 className="mt-3 text-3xl font-extrabold leading-tight text-base-content md:text-4xl">
                             {product.name}
                         </h1>
 
+                        {/* Product Rating */}
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+
+                            <span className="text-warning">
+                                {'★'.repeat(
+                                    Math.round(reviewSummary.averageRating)
+                                )}
+                                <span className="text-base-content/20">
+                                    {'★'.repeat(
+                                        5 - Math.round(reviewSummary.averageRating)
+                                    )}
+                                </span>
+                            </span>
+
+                            <span className="text-sm font-semibold">
+                                {reviewSummary.averageRating.toFixed(1)}
+                            </span>
+
+                            <span className="text-sm text-base-content/50">
+                                ({reviewSummary.totalReviews} reviews)
+                            </span>
+
+                        </div>
+
                         {/* Price */}
+
                         <div className="mt-5 flex flex-wrap items-center gap-3">
                             <span className="text-3xl font-extrabold text-primary">
                                 ৳{Number(product.price).toLocaleString('en-BD')}
@@ -262,12 +476,14 @@ const ProductPage = () => {
                         </div>
 
                         {/* Description */}
+
                         <p className="mt-6 leading-8 text-base-content/70">
                             {product.description ||
                                 'No description available for this product.'}
                         </p>
 
                         {/* Product Details */}
+
                         <div className="mt-7 space-y-4 rounded-2xl border border-base-300 bg-secondary p-5">
 
                             <div className="flex items-center justify-between gap-3">
@@ -307,9 +523,11 @@ const ProductPage = () => {
                                     {product.sku || 'N/A'}
                                 </span>
                             </div>
+
                         </div>
 
-                        {/* Add to Cart Button */}
+                        {/* Add to Cart */}
+
                         <button
                             type="button"
                             disabled={Number(product.stock) <= 0}
@@ -324,8 +542,259 @@ const ProductPage = () => {
                         <p className="mt-4 text-center text-xs text-base-content/50">
                             🧡 Little Things, Big Smiles
                         </p>
+
                     </div>
                 </div>
+
+                {/* ========================================
+                    Customer Reviews
+                ======================================== */}
+
+                <section className="mt-16">
+
+                    <div className="mb-8">
+                        <p className="text-xs font-bold tracking-widest text-primary">
+                            CUSTOMER FEEDBACK
+                        </p>
+
+                        <h2 className="mt-2 text-3xl font-extrabold">
+                            Customer Reviews
+                        </h2>
+
+                        <p className="mt-2 text-sm text-base-content/60">
+                            See what customers think about this product.
+                        </p>
+                    </div>
+
+                    {/* Review Summary */}
+
+                    <div className="mb-8 grid gap-5 rounded-2xl border border-base-300 bg-secondary p-6 sm:grid-cols-2">
+
+                        <div>
+                            <p className="text-sm text-base-content/60">
+                                Average Rating
+                            </p>
+
+                            <div className="mt-2 flex items-center gap-3">
+                                <span className="text-4xl font-extrabold text-primary">
+                                    {reviewSummary.averageRating.toFixed(1)}
+                                </span>
+
+                                <div>
+                                    <p className="text-xl text-warning">
+                                        {'★'.repeat(
+                                            Math.round(reviewSummary.averageRating)
+                                        )}
+                                    </p>
+
+                                    <p className="text-xs text-base-content/50">
+                                        Out of 5 stars
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col justify-center">
+                            <p className="text-sm text-base-content/60">
+                                Total Approved Reviews
+                            </p>
+
+                            <p className="mt-2 text-3xl font-extrabold">
+                                {reviewSummary.totalReviews}
+                            </p>
+                        </div>
+
+                    </div>
+
+                    {/* Review List */}
+
+                    <div className="space-y-4">
+
+                        {reviewsLoading ? (
+                            <div className="py-10 text-center">
+                                <span className="loading loading-spinner loading-md text-primary" />
+                                <p className="mt-3 text-sm text-base-content/60">
+                                    Loading reviews...
+                                </p>
+                            </div>
+                        ) : reviewError ? (
+                            <div className="rounded-xl border border-error/30 p-5 text-sm text-error">
+                                {reviewError}
+                            </div>
+                        ) : reviews.length === 0 ? (
+                            <div className="rounded-2xl border border-base-300 bg-base-100 p-8 text-center">
+                                <div className="text-4xl">💬</div>
+
+                                <h3 className="mt-3 text-lg font-bold">
+                                    No reviews yet
+                                </h3>
+
+                                <p className="mt-2 text-sm text-base-content/60">
+                                    Be the first customer to share your experience!
+                                </p>
+                            </div>
+                        ) : (
+                            reviews.map((review) => (
+                                <article
+                                    key={review._id}
+                                    className="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-sm"
+                                >
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+
+                                        <div>
+                                            <h3 className="font-bold">
+                                                {review.userName || 'Customer'}
+                                            </h3>
+
+                                            <p className="mt-1 text-xs text-base-content/50">
+                                                {review.createdAt
+                                                    ? new Date(
+                                                        review.createdAt
+                                                    ).toLocaleDateString()
+                                                    : ''}
+                                            </p>
+                                        </div>
+
+                                        {review.verifiedPurchase && (
+                                            <span className="badge badge-success badge-outline">
+                                                Verified Purchase
+                                            </span>
+                                        )}
+
+                                    </div>
+
+                                    <div className="mt-3 text-lg text-warning">
+                                        {'★'.repeat(review.rating)}
+                                        <span className="text-base-content/20">
+                                            {'★'.repeat(5 - review.rating)}
+                                        </span>
+                                    </div>
+
+                                    <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-base-content/80">
+                                        {review.comment}
+                                    </p>
+
+                                </article>
+                            ))
+                        )}
+
+                    </div>
+
+                    {/* Submit Review Form */}
+
+                    <div className="mt-12 rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm sm:p-8">
+
+                        <p className="text-xs font-bold tracking-widest text-primary">
+                            SHARE YOUR EXPERIENCE
+                        </p>
+
+                        <h3 className="mt-2 text-2xl font-extrabold">
+                            Write a Review
+                        </h3>
+
+                        <p className="mt-2 text-sm text-base-content/60">
+                            Tell other customers what you think about this product.
+                        </p>
+
+                        <form
+                            onSubmit={handleSubmitReview}
+                            className="mt-7 space-y-6"
+                        >
+
+                            {/* Rating Selection */}
+
+                            <div>
+                                <label className="mb-3 block text-sm font-bold">
+                                    Your Rating
+                                </label>
+
+                                <div className="flex items-center gap-2">
+
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                        <button
+                                            key={star}
+                                            type="button"
+                                            onClick={() => setRating(star)}
+                                            aria-label={`Rate ${star} out of 5`}
+                                            className={`text-3xl transition hover:scale-110 ${
+                                                star <= rating
+                                                    ? 'text-warning'
+                                                    : 'text-base-content/20'
+                                            }`}
+                                        >
+                                            ★
+                                        </button>
+                                    ))}
+
+                                    <span className="ml-2 text-sm font-semibold">
+                                        {rating}/5
+                                    </span>
+
+                                </div>
+                            </div>
+
+                            {/* Review Comment */}
+
+                            <div>
+                                <label
+                                    htmlFor="reviewComment"
+                                    className="mb-2 block text-sm font-bold"
+                                >
+                                    Your Review
+                                </label>
+
+                                <textarea
+                                    id="reviewComment"
+                                    value={comment}
+                                    onChange={(event) =>
+                                        setComment(event.target.value)
+                                    }
+                                    placeholder="Share your experience with this product..."
+                                    rows={5}
+                                    maxLength={2000}
+                                    minLength={5}
+                                    required
+                                    className="textarea textarea-bordered w-full bg-base-100 text-base-content focus:border-primary focus:outline-none"
+                                />
+
+                                <p className="mt-2 text-right text-xs text-base-content/50">
+                                    {comment.length}/2000 characters
+                                </p>
+                            </div>
+
+                            {reviewError && (
+                                <div className="rounded-xl border border-error/30 bg-error/5 p-3 text-sm text-error">
+                                    {reviewError}
+                                </div>
+                            )}
+
+                            {/* Submit Button */}
+
+                            <button
+                                type="submit"
+                                disabled={reviewSubmitting}
+                                className="btn btn-primary w-full sm:w-auto"
+                            >
+                                {reviewSubmitting ? (
+                                    <>
+                                        <span className="loading loading-spinner loading-sm" />
+                                        Submitting...
+                                    </>
+                                ) : (
+                                    'Submit Review →'
+                                )}
+                            </button>
+
+                            <p className="text-xs leading-6 text-base-content/50">
+                                Only customers who have received this product can submit a review. Reviews will appear publicly after admin approval.
+                            </p>
+
+                        </form>
+
+                    </div>
+
+                </section>
+
             </div>
         </main>
     );

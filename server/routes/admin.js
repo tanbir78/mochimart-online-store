@@ -21,6 +21,12 @@ const PAYMENT_STATUSES = [
     'refunded'
 ];
 
+const REVIEW_STATUSES = [
+    'pending',
+    'approved',
+    'rejected'
+];
+
 // Allowed order status transitions
 const ORDER_STATUS_TRANSITIONS = {
     pending: ['processing', 'cancelled'],
@@ -41,6 +47,46 @@ const ORDER_NOTIFICATION_MESSAGES = {
 // Escape special regex characters
 function escapeRegex(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ========================================
+// Review Rating Helper
+// ========================================
+
+async function updateProductRating(productId) {
+    const db = getDb();
+
+    const result = await db.collection('reviews')
+        .aggregate([
+            {
+                $match: {
+                    productId,
+                    status: 'approved'
+                }
+            },
+            {
+                $group: {
+                    _id: '$productId',
+                    averageRating: { $avg: '$rating' },
+                    reviewCount: { $sum: 1 }
+                }
+            }
+        ])
+        .toArray();
+
+    const averageRating = result[0]?.averageRating || 0;
+    const reviewCount = result[0]?.reviewCount || 0;
+
+    await db.collection('products').updateOne(
+        { _id: productId },
+        {
+            $set: {
+                rating: Number(averageRating.toFixed(1)),
+                reviewCount,
+                updatedAt: new Date()
+            }
+        }
+    );
 }
 
 // ========================================
@@ -460,12 +506,8 @@ async function updateOrderStatus(req, res, next) {
                 { session }
             );
 
-            // ========================================
             // Create Customer Notification
-            // ========================================
-
             // Only registered customers receive notifications.
-            // Guest orders do not have a userId.
             if (order.userId) {
                 const notification = {
                     userId: order.userId,
@@ -561,6 +603,138 @@ async function updatePaymentStatus(req, res, next) {
 }
 
 // ========================================
+// Get All Reviews
+// GET /api/admin/reviews
+// ========================================
+
+async function getAllReviews(req, res, next) {
+    try {
+        const db = getDb();
+
+        const status = typeof req.query.status === 'string'
+            ? req.query.status
+            : 'pending';
+
+        const page = Math.max(
+            1,
+            parseInt(req.query.page, 10) || 1
+        );
+
+        const limit = Math.min(
+            50,
+            Math.max(1, parseInt(req.query.limit, 10) || 10)
+        );
+
+        if (!REVIEW_STATUSES.includes(status)) {
+            return res.status(400).json({
+                error: 'Invalid review status.'
+            });
+        }
+
+        const filter = { status };
+        const skip = (page - 1) * limit;
+
+        const [reviews, totalReviews] = await Promise.all([
+            db.collection('reviews')
+                .find(filter)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .toArray(),
+
+            db.collection('reviews').countDocuments(filter)
+        ]);
+
+        return res.json({
+            reviews,
+            pagination: {
+                currentPage: page,
+                limit,
+                totalReviews,
+                totalPages: Math.ceil(totalReviews / limit)
+            }
+        });
+
+    } catch (error) {
+        next(error);
+    }
+}
+
+// ========================================
+// Update Review Moderation Status
+// PATCH /api/admin/reviews/:id/status
+// ========================================
+
+async function updateReviewStatus(req, res, next) {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({
+                error: 'Invalid review ID.'
+            });
+        }
+
+        if (!['approved', 'rejected'].includes(status)) {
+            return res.status(400).json({
+                error: 'Review status must be approved or rejected.'
+            });
+        }
+
+        const db = getDb();
+        const reviewId = new ObjectId(id);
+
+        const review = await db.collection('reviews').findOne({
+            _id: reviewId
+        });
+
+        if (!review) {
+            return res.status(404).json({
+                error: 'Review not found.'
+            });
+        }
+
+        if (review.status === status) {
+            return res.status(409).json({
+                error: `Review is already ${status}.`
+            });
+        }
+
+        const moderatedAt = new Date();
+
+        await db.collection('reviews').updateOne(
+            { _id: reviewId },
+            {
+                $set: {
+                    status,
+                    moderatedAt,
+                    moderatedBy: {
+                        uid: req.user.uid,
+                        email: req.user.email || ''
+                    },
+                    updatedAt: moderatedAt
+                }
+            }
+        );
+
+        // Recalculate product rating after moderation
+        await updateProductRating(review.productId);
+
+        const updatedReview = await db.collection('reviews')
+            .findOne({ _id: reviewId });
+
+        return res.json({
+            message: `Review ${status} successfully.`,
+            review: updatedReview
+        });
+
+    } catch (error) {
+        next(error);
+    }
+}
+
+// ========================================
 // Dashboard Route
 // ========================================
 
@@ -619,4 +793,22 @@ adminRouter.patch(
     requireAuth,
     requireAdmin,
     updatePaymentStatus
+);
+
+// ========================================
+// Review Moderation Routes
+// ========================================
+
+adminRouter.get(
+    '/reviews',
+    requireAuth,
+    requireAdmin,
+    getAllReviews
+);
+
+adminRouter.patch(
+    '/reviews/:id/status',
+    requireAuth,
+    requireAdmin,
+    updateReviewStatus
 );
